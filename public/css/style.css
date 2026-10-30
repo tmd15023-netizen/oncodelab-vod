@@ -462,7 +462,7 @@ button.course-card {
 .mini-thumb.has-photo,
 .cover-preview {
   border: 0;
-  box-shadow: 0 0 0 1px rgba(23, 32, 51, 0.08), 0 10px 24px rgba(23, 32, 51, 0.14);
+  box-shadow: 0 0 0 4px rgba(120, 130, 145, 0.55), 0 10px 24px rgba(23, 32, 51, 0.16);
 }
 
 .thumb.has-photo .thumb-chip {
