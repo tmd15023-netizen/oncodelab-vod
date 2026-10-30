@@ -2,7 +2,8 @@
   "name": "ncodelab-vod",
   "private": true,
   "scripts": {
-    "start": "node server.js"
+    "start": "node server.js",
+    "r2-cors": "node scripts/r2-cors.js"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.922.0",

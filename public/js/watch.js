@@ -18,6 +18,10 @@
     if (item.id === lessonId) lesson = item;
   });
   if (!lesson) {
+    if (!lessons.length) {
+      root.innerHTML = '<div class="empty"><strong>아직 등록된 회차가 없습니다</strong><p><a class="link-more" href="course.html?id=' + encodeURIComponent(course.id) + '">강의 소개로 돌아가기</a></p></div>';
+      return;
+    }
     location.replace(window.VodUI.watchHref(course.id, lessons[0].id));
     return;
   }
@@ -25,11 +29,11 @@
   document.title = lesson.title + " · 온코드랩 VOD";
 
   function uploaded(item) {
-    return !!(item.video && (item.video.indexOf("remote:") === 0 || item.video.indexOf("idb:") === 0));
+    return !!(item.video && item.video.indexOf("remote:") === 0);
   }
 
   function external(item) {
-    return !!(item.video && item.video.indexOf("remote:") !== 0 && item.video.indexOf("idb:") !== 0);
+    return !!(item.video && item.video.indexOf("remote:") !== 0);
   }
 
   function lockHTML(access) {
@@ -44,6 +48,12 @@
     if (access === "rejected") {
       return '<div class="lock"><div><h2>수강 승인이 되지 않았습니다</h2><p>다시 신청하면 관리자가 검토합니다.</p>' +
         '<button type="button" class="btn primary" data-apply>다시 수강 신청</button></div></div>';
+    }
+    if (access === "scheduled") {
+      return '<div class="lock"><div><h2>수강 시작 전입니다</h2><p>관리자가 정한 시작일이 되면 이 강의의 영상을 볼 수 있습니다.</p></div></div>';
+    }
+    if (access === "expired") {
+      return '<div class="lock"><div><h2>수강 기간이 끝났습니다</h2><p>기간을 연장하려면 관리자에게 요청해 주세요.</p></div></div>';
     }
     return '<div class="lock"><div><h2>수강 신청 후 볼 수 있습니다</h2><p>이 강의는 승인된 수강생만 재생할 수 있습니다.</p>' +
       '<button type="button" class="btn primary" data-apply>수강 신청</button></div></div>';
@@ -163,7 +173,7 @@
     }
     video.addEventListener("timeupdate", function () {
       var now = Date.now();
-      if (now - last < 2000) return;
+      if (now - last < 15000) return;
       last = now;
       persist();
     });
@@ -219,7 +229,7 @@
       window.addEventListener("pagehide", function () {
         var current = document.getElementById("lecture");
         if (!current) return;
-        window.VodStore.savePosition(course.id, lesson.id, current.currentTime || 0);
+        window.VodStore.savePosition(course.id, lesson.id, current.currentTime || 0, true);
       });
     }
 

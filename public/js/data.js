@@ -180,7 +180,7 @@
     return lessonsOf(course).reduce(function (sum, item) { return sum + item.seconds; }, 0);
   }
 
-  window.VodCatalog = {
+  var catalog = {
     sampleVideo: "assets/sample.mp4",
     sampleRemote: "https://interactive-examples.mdn.mozilla.net/media/cc0-videos/flower.mp4",
     courses: courses,
@@ -188,4 +188,8 @@
     lessonsOf: lessonsOf,
     durationOf: durationOf
   };
+
+  /* 서버(server.js)도 같은 강의 목록으로 강의와 회차 번호를 확인합니다. */
+  if (typeof module === "object" && module.exports) module.exports = catalog;
+  else window.VodCatalog = catalog;
 })();

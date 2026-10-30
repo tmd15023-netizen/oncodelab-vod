@@ -8,7 +8,7 @@
     ? '<p class="fine">' + window.VodUI.esc(student.email) + (student.role === "admin" ? " · 관리자" : " · 수강생") + "</p>"
     : "";
   var action = student
-    ? (student.role === "admin" ? '<a class="btn primary" href="admin.html">영상 관리</a>' : "") +
+    ? (student.role === "admin" ? '<a class="btn primary" href="admin.html">관리자 대시보드</a>' : "") +
       '<button type="button" class="btn" data-logout>로그아웃</button>'
     : '<button type="button" class="btn" data-open-signup>회원가입</button><button type="button" class="btn primary" data-open-gate>로그인</button>';
 
@@ -18,6 +18,8 @@
     if (access === "approved") return "수강 가능";
     if (access === "pending") return "승인 대기";
     if (access === "rejected") return "승인 거절";
+    if (access === "scheduled") return "수강 시작 전";
+    if (access === "expired") return "수강 기간 종료";
     if (access === "none") return "수강 신청 전";
     return "로그인 필요";
   }
@@ -32,6 +34,8 @@
     if (access === "approved" || access === "admin") return point.label;
     if (access === "pending") return "승인 대기";
     if (access === "rejected") return "다시 신청";
+    if (access === "scheduled") return "시작 전";
+    if (access === "expired") return "기간 종료";
     if (access === "none") return "수강 신청";
     return "강의 보기";
   }

@@ -885,12 +885,14 @@ img { display: block; max-width: 100%; }
   font-weight: 800;
 }
 
-.field input {
+.field input,
+.field select {
   height: 44px;
   padding: 0 12px;
   border: 1px solid var(--line);
   border-radius: 12px;
   font-weight: 500;
+  background: #fff;
 }
 
 .form-error { margin-top: 8px; color: #d12b4a; font-size: 13px; font-weight: 700; }
@@ -923,6 +925,32 @@ img { display: block; max-width: 100%; }
 .stack { display: grid; gap: 10px; }
 
 .admin-tabs { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 18px; }
+
+.dash-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px;
+  margin-top: 18px;
+}
+
+.dash-card,
+.member-card {
+  padding: 16px 18px;
+  border-radius: 18px;
+  background: #fff;
+  box-shadow: var(--shadow);
+}
+
+.dash-card strong { display: block; font-size: 28px; line-height: 1.2; }
+.dash-card span { color: var(--muted); font-size: 13px; font-weight: 700; }
+
+.member-card { margin-top: 14px; }
+.member-head { display: flex; justify-content: space-between; gap: 12px; align-items: center; }
+.member-head p,
+.period-fields { color: var(--muted); }
+.period-fields { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 8px; }
+.period-fields .field { min-width: 150px; margin: 0; }
+.enroll-edit { align-items: flex-start; }
 
 .admin-status { min-height: 1.4em; margin-top: 10px; color: var(--blue-deep); font-weight: 800; }
 .admin-status.is-error { color: #d12b4a; }
@@ -1029,6 +1057,7 @@ img { display: block; max-width: 100%; }
   .lesson-row { grid-template-columns: 1fr; }
   .lesson-row .time { display: none; }
   .progress-row,
+  .dash-grid { grid-template-columns: 1fr 1fr; }
   .enroll-row { grid-template-columns: 1fr; }
   .enroll-row { display: grid; }
   .stat-row { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); }

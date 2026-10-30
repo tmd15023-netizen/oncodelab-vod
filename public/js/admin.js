@@ -1,7 +1,7 @@
 (function () {
   window.VodStore.ready.then(function () {
   var root = document.getElementById("app");
-  var tab = "videos";
+  var tab = "home";
   var filter = "pending";
   var status = { text: "", error: false };
   var busy = false;
@@ -43,19 +43,109 @@
     }
 
     var pending = window.VodStore.listEnrollments().filter(function (item) { return item.status === "pending"; }).length;
+    var panel = videoPanel();
+    if (tab === "home") panel = dashboardPanel();
+    if (tab === "members") panel = membersPanel();
+    if (tab === "enroll") panel = enrollPanel();
     root.innerHTML =
       '<header class="page-intro">' +
         '<p class="eyebrow"><span class="dot" aria-hidden="true"></span>ADMIN</p>' +
-        "<h1>영상·수강 관리</h1>" +
-        '<p class="lede">' + window.VodUI.esc(user.name) + " 님, 회차 영상을 올리고 수강 신청을 승인합니다. 회원, 수강 정보, 영상 파일 정보는 서버에 저장됩니다.</p>" +
+        "<h1>관리자 대시보드</h1>" +
+        '<p class="lede">' + window.VodUI.esc(user.name) + " 님, 회원별 수강 영상 승인과 수강 기간을 관리합니다.</p>" +
         '<p class="admin-status' + (status.error ? " is-error" : "") + '" role="status">' + window.VodUI.esc(status.text) + "</p>" +
         '<div class="hero-actions"><button type="button" class="btn" data-logout>로그아웃</button></div>' +
       "</header>" +
       '<div class="admin-tabs" role="tablist">' +
-        '<button type="button" class="chip" data-tab="videos" aria-pressed="' + (tab === "videos" ? "true" : "false") + '">영상 관리</button>' +
+        '<button type="button" class="chip" data-tab="home" aria-pressed="' + (tab === "home" ? "true" : "false") + '">대시보드</button>' +
+        '<button type="button" class="chip" data-tab="members" aria-pressed="' + (tab === "members" ? "true" : "false") + '">회원</button>' +
         '<button type="button" class="chip" data-tab="enroll" aria-pressed="' + (tab === "enroll" ? "true" : "false") + '">수강 승인' + (pending ? " " + pending : "") + "</button>" +
+        '<button type="button" class="chip" data-tab="videos" aria-pressed="' + (tab === "videos" ? "true" : "false") + '">영상 관리</button>' +
       "</div>" +
-      (tab === "enroll" ? enrollPanel() : videoPanel());
+      panel;
+  }
+
+  function dateInputValue(timestamp) {
+    if (!timestamp) return "";
+    var date = new Date(timestamp);
+    return date.getFullYear() + "-" + String(date.getMonth() + 1).padStart(2, "0") + "-" + String(date.getDate()).padStart(2, "0");
+  }
+
+  function periodText(item) {
+    if (item.status !== "approved") return "";
+    if (!item.accessStart && !item.accessEnd) return "기간 제한 없음";
+    var start = item.accessStart ? dateInputValue(item.accessStart).replace(/-/g, ".") : "승인 즉시";
+    var end = item.accessEnd ? dateInputValue(item.accessEnd).replace(/-/g, ".") : "종료일 없음";
+    return start + " ~ " + end;
+  }
+
+  function accessLabel(item) {
+    if (item.status === "rejected") return "거절";
+    if (item.status !== "approved") return "대기";
+    var now = Date.now();
+    if (item.accessStart && now < item.accessStart) return "시작 전";
+    if (item.accessEnd && now > item.accessEnd) return "기간 종료";
+    return "수강 중";
+  }
+
+  function courseOptions() {
+    return window.VodCatalog.courses.map(function (course) {
+      return '<option value="' + window.VodUI.esc(course.id) + '">' + window.VodUI.esc(course.title) + "</option>";
+    }).join("");
+  }
+
+  function dashboardPanel() {
+    var users = window.VodStore.listUsers().filter(function (item) { return item.role !== "admin"; });
+    var rows = window.VodStore.listEnrollments();
+    var now = Date.now();
+    var pending = rows.filter(function (item) { return item.status === "pending"; });
+    var active = rows.filter(function (item) {
+      return item.status === "approved" && (!item.accessStart || now >= item.accessStart) && (!item.accessEnd || now <= item.accessEnd);
+    });
+    var expired = rows.filter(function (item) { return item.status === "approved" && item.accessEnd && now > item.accessEnd; });
+    var cards = [
+      [String(users.length), "회원"],
+      [String(pending.length), "승인 대기"],
+      [String(active.length), "수강 중"],
+      [String(expired.length), "기간 종료"]
+    ].map(function (item) {
+      return '<article class="dash-card"><strong>' + item[0] + "</strong><span>" + item[1] + "</span></article>";
+    }).join("");
+    var waiting = pending.slice(0, 5).map(function (item) {
+      return '<article class="enroll-row"><div><strong>' + window.VodUI.esc(item.name) + "</strong><p>" +
+        window.VodUI.esc(item.email) + " · " + window.VodUI.esc(item.courseTitle) + "</p></div>" +
+        '<button type="button" class="btn small primary" data-tab="enroll">승인하러 가기</button></article>';
+    }).join("");
+    return '<section class="dash-grid">' + cards + "</section>" +
+      '<section class="section"><div class="section-head"><div><h2>승인 대기</h2></div></div>' +
+      (waiting || '<div class="empty"><strong>대기 중인 신청이 없습니다</strong><p>회원이 수강 신청을 하면 이곳에 나타납니다.</p></div>') +
+      "</section>";
+  }
+
+  function membersPanel() {
+    var users = window.VodStore.listUsers().filter(function (item) { return item.role !== "admin"; });
+    if (!users.length) {
+      return '<div class="empty"><strong>등록된 회원이 없습니다</strong><p>회원가입한 수강생이 이곳에 나타납니다.</p></div>';
+    }
+    return users.map(function (user) {
+      var rows = window.VodStore.listEnrollments().filter(function (item) { return item.userId === user.id; });
+      var list = rows.length
+        ? rows.map(function (item) {
+            return "<li><strong>" + window.VodUI.esc(item.courseTitle) + "</strong> · " + accessLabel(item) +
+              (periodText(item) ? " · " + window.VodUI.esc(periodText(item)) : "") + "</li>";
+          }).join("")
+        : "<li>승인된 강의가 없습니다.</li>";
+      return '<section class="member-card"><div class="member-head"><div><strong>' + window.VodUI.esc(user.name) + "</strong><p>" +
+        window.VodUI.esc(user.email) + " · 가입 " + window.VodUI.esc(window.VodUI.formatWhen(user.createdAt)) + "</p></div>" +
+        '<button type="button" class="btn small danger" data-delete-user="' + window.VodUI.esc(user.id) + '" data-user-name="' + window.VodUI.esc(user.name) + '">회원 삭제</button></div>' +
+        '<ul class="user-list">' + list + "</ul>" +
+        '<form class="manage-form" data-grant-user="' + window.VodUI.esc(user.id) + '">' +
+          "<h3>수강 승인</h3>" +
+          '<label class="field">강의<select name="course" required>' + courseOptions() + "</select></label>" +
+          '<div class="period-fields"><label class="field">시작일<input name="start" type="date" /></label>' +
+          '<label class="field">종료일<input name="end" type="date" /></label></div>' +
+          '<button class="btn primary" type="submit">이 강의 승인</button>' +
+        "</form></section>";
+    }).join("");
   }
 
   function enrollPanel() {
@@ -72,20 +162,29 @@
     }).join("");
     var body = rows.length
       ? rows.map(function (item) {
-          var label = item.status === "approved" ? "승인" : item.status === "rejected" ? "거절" : "대기";
-          return '<article class="enroll-row">' +
+          var label = accessLabel(item);
+          var pill = item.status === "approved" && label !== "수강 중" ? "pending" : item.status;
+          return '<article class="enroll-row enroll-edit">' +
             "<div><strong>" + window.VodUI.esc(item.name) + "</strong>" +
-            "<p>" + window.VodUI.esc(item.email) + " · " + window.VodUI.esc(item.courseTitle) + " · " + window.VodUI.esc(window.VodUI.formatWhen(item.createdAt)) + "</p></div>" +
-            '<div class="enroll-actions"><span class="pill ' + window.VodUI.esc(item.status) + '">' + label + "</span>" +
-            '<button type="button" class="btn small primary" data-approve="' + window.VodUI.esc(item.id) + '"' + (item.status === "approved" ? " disabled" : "") + ">승인</button>" +
+            "<p>" + window.VodUI.esc(item.email) + " · " + window.VodUI.esc(item.courseTitle) +
+            (periodText(item) ? " · " + window.VodUI.esc(periodText(item)) : "") + "</p>" +
+            '<div class="period-fields"><label class="field">시작일<input type="date" data-start-for="' + window.VodUI.esc(item.id) + '" value="' + dateInputValue(item.accessStart) + '" /></label>' +
+            '<label class="field">종료일<input type="date" data-end-for="' + window.VodUI.esc(item.id) + '" value="' + dateInputValue(item.accessEnd) + '" /></label></div></div>' +
+            '<div class="enroll-actions"><span class="pill ' + window.VodUI.esc(pill) + '">' + label + "</span>" +
+            '<button type="button" class="btn small primary" data-approve="' + window.VodUI.esc(item.id) + '">승인</button>' +
             '<button type="button" class="btn small" data-reject="' + window.VodUI.esc(item.id) + '"' + (item.status === "rejected" ? " disabled" : "") + ">거절</button></div></article>";
         }).join("")
       : '<div class="empty"><strong>표시할 신청이 없습니다</strong><p>수강생이 강의에서 수강 신청을 하면 이곳에 나타납니다.</p></div>';
-    var users = window.VodStore.listUsers().map(function (item) {
-      return "<li><strong>" + window.VodUI.esc(item.name) + "</strong> · " + window.VodUI.esc(item.email) + (item.role === "admin" ? " · 관리자" : "") + "</li>";
-    }).join("");
-    return '<section class="section"><div class="chips">' + filters + '</div><div class="stack">' + body + "</div></section>" +
-      '<section class="section"><div class="section-head"><div><h2>가입 계정</h2></div></div><ul class="user-list">' + users + "</ul></section>";
+    return '<section class="section"><div class="chips">' + filters + '</div><div class="stack">' + body + "</div></section>";
+  }
+
+  function periodFrom(id) {
+    var start = root.querySelector('[data-start-for="' + id + '"]');
+    var end = root.querySelector('[data-end-for="' + id + '"]');
+    return {
+      accessStart: start ? start.value : "",
+      accessEnd: end ? end.value : ""
+    };
   }
 
   function videoPanel() {
@@ -138,7 +237,7 @@
     }
     var approve = event.target.closest("[data-approve]");
     if (approve) {
-      window.VodStore.setEnrollment(approve.getAttribute("data-approve"), "approved").then(function (approved) {
+      window.VodStore.setEnrollment(approve.getAttribute("data-approve"), "approved", periodFrom(approve.getAttribute("data-approve"))).then(function (approved) {
         setStatus(approved.ok ? "수강 신청을 승인했습니다." : approved.message, !approved.ok);
         render();
       });
@@ -203,7 +302,36 @@
     }
   });
 
+  root.addEventListener("click", function (event) {
+    var removeUser = event.target.closest("[data-delete-user]");
+    if (!removeUser) return;
+    if (busy) return;
+    var name = removeUser.getAttribute("data-user-name") || "이 회원";
+    if (!window.confirm(name + " 계정과 수강 기록을 삭제할까요?")) return;
+    busy = true;
+    window.VodStore.deleteUser(removeUser.getAttribute("data-delete-user")).then(function (result) {
+      busy = false;
+      setStatus(result.ok ? "회원을 삭제했습니다." : result.message, !result.ok);
+      render();
+    });
+  });
+
   root.addEventListener("submit", function (event) {
+    var grant = event.target.closest("[data-grant-user]");
+    if (grant) {
+      event.preventDefault();
+      if (busy) return;
+      busy = true;
+      window.VodStore.grantEnrollment(grant.getAttribute("data-grant-user"), grant.course.value, {
+        accessStart: grant.start.value,
+        accessEnd: grant.end.value
+      }).then(function (result) {
+        busy = false;
+        setStatus(result.ok ? "수강을 승인했습니다." : result.message, !result.ok);
+        render();
+      });
+      return;
+    }
     var form = event.target.closest("[data-add-lesson]");
     if (!form) return;
     event.preventDefault();
@@ -214,29 +342,32 @@
       render();
       return;
     }
-    var created = window.VodStore.addLesson({
+    busy = true;
+    setStatus(file ? "회차를 추가하고 영상을 저장하는 중입니다." : "회차를 추가하는 중입니다.");
+    window.VodStore.addLesson({
       courseId: form.getAttribute("data-add-lesson"),
       chapterTitle: form.chapter.value,
       title: form.title.value,
       summary: form.summary.value
-    });
-    if (!created.ok) {
-      setStatus(created.message, true);
+    }).then(function (created) {
+      if (!created.ok) {
+        busy = false;
+        setStatus(created.message, true);
+        render();
+        return;
+      }
+      if (!file) {
+        busy = false;
+        setStatus("회차를 추가했습니다.");
+        render();
+        return;
+      }
       render();
-      return;
-    }
-    if (!file) {
-      setStatus("회차를 추가했습니다.");
-      render();
-      return;
-    }
-    busy = true;
-    setStatus("회차를 추가하고 영상을 저장하는 중입니다.");
-    render();
-    window.VodStore.saveVideo(created.id, file).then(function (result) {
-      busy = false;
-      setStatus(result.ok ? "회차와 영상을 저장했습니다." : "회차는 추가됐지만 영상을 저장하지 못했습니다. " + result.message, !result.ok);
-      render();
+      window.VodStore.saveVideo(created.id, file).then(function (result) {
+        busy = false;
+        setStatus(result.ok ? "회차와 영상을 저장했습니다." : "회차는 추가됐지만 영상을 저장하지 못했습니다. " + result.message, !result.ok);
+        render();
+      });
     });
   });
 

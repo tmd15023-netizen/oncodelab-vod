@@ -16,6 +16,8 @@
     if (access === "none") return "수강 신청 후 관리자가 승인하면 영상을 볼 수 있습니다.";
     if (access === "pending") return "수강 신청이 접수되었습니다. 승인되면 회차를 재생할 수 있습니다.";
     if (access === "rejected") return "이전 신청은 승인되지 않았습니다. 다시 신청할 수 있습니다.";
+    if (access === "scheduled") return "수강이 승인되었습니다. 시작일이 되면 영상을 볼 수 있습니다.";
+    if (access === "expired") return "수강 가능 기간이 끝났습니다. 연장은 관리자에게 요청해 주세요.";
     if (access === "admin") return "관리자 계정은 승인 없이 영상을 볼 수 있습니다.";
     return "";
   }
@@ -55,6 +57,8 @@
     else if (access === "none") action = '<button type="button" class="btn primary" data-apply>수강 신청</button>';
     else if (access === "pending") action = '<button type="button" class="btn is-disabled" disabled>승인 대기 중</button>';
     else if (access === "rejected") action = '<button type="button" class="btn primary" data-apply>다시 수강 신청</button>';
+    else if (access === "scheduled") action = '<button type="button" class="btn is-disabled" disabled>수강 시작 전</button>';
+    else if (access === "expired") action = '<button type="button" class="btn is-disabled" disabled>수강 기간 종료</button>';
     var note = notice || statusCopy(access);
 
     root.innerHTML =

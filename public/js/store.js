@@ -1,189 +1,30 @@
 (function () {
-  var KEY = "ncodelab-vod-v2";
-  var ADMIN_EMAIL = "admin@ncodelab.kr";
-  var ADMIN_SALT = "ncodelab-admin-seed";
-  var ADMIN_HASH = "707a73d2eb8338bc0354077f740e648c3112c4bf432f382347fbf0898b71609e";
+  /* 예전 버전이 관리자 브라우저에 회차를 저장하던 자리입니다. 서버로 옮긴 뒤 지웁니다. */
+  var LEGACY_KEY = "ncodelab-vod-v2";
   var baseCourses = null;
-  var urlCache = {};
-  var mediaDbPromise = null;
   var account = null;
   var enrollmentCache = [];
   var progressCache = {};
   var userCache = [];
   var videoCache = {};
+  var lessonCache = [];
 
-  function empty() {
-    return {
-      version: 2,
-      sessionId: null,
-      users: [],
-      enrollments: [],
-      progress: {},
-      videos: {},
-      customLessons: []
-    };
-  }
-
-  function sha256(ascii) {
-    function rightRotate(value, amount) {
-      return (value >>> amount) | (value << (32 - amount));
-    }
-    var mathPow = Math.pow;
-    var maxWord = mathPow(2, 32);
-    var lengthProperty = "length";
-    var i;
-    var j;
-    var result = "";
-    var words = [];
-    var asciiBitLength = ascii[lengthProperty] * 8;
-    var hash = sha256.h = sha256.h || [];
-    var k = sha256.k = sha256.k || [];
-    var primeCounter = k[lengthProperty];
-    var isComposite = {};
-    for (var candidate = 2; primeCounter < 64; candidate++) {
-      if (!isComposite[candidate]) {
-        for (i = 0; i < 313; i += candidate) isComposite[i] = candidate;
-        hash[primeCounter] = (mathPow(candidate, 0.5) * maxWord) | 0;
-        k[primeCounter++] = (mathPow(candidate, 1 / 3) * maxWord) | 0;
-      }
-    }
-    ascii += "\x80";
-    while ((ascii[lengthProperty] % 64) - 56) ascii += "\x00";
-    for (i = 0; i < ascii[lengthProperty]; i++) {
-      j = ascii.charCodeAt(i);
-      words[i >> 2] |= j << (((3 - i) % 4) * 8);
-    }
-    words[words[lengthProperty]] = (asciiBitLength / maxWord) | 0;
-    words[words[lengthProperty]] = asciiBitLength;
-    for (j = 0; j < words[lengthProperty];) {
-      var w = words.slice(j, (j += 16));
-      var oldHash = hash;
-      hash = hash.slice(0, 8);
-      for (i = 0; i < 64; i++) {
-        var w15 = w[i - 15];
-        var w2 = w[i - 2];
-        var a = hash[0];
-        var e = hash[4];
-        var temp1 = hash[7]
-          + (rightRotate(e, 6) ^ rightRotate(e, 11) ^ rightRotate(e, 25))
-          + ((e & hash[5]) ^ ((~e) & hash[6]))
-          + k[i]
-          + (w[i] = (i < 16) ? w[i] : (
-            w[i - 16]
-            + (rightRotate(w15, 7) ^ rightRotate(w15, 18) ^ (w15 >>> 3))
-            + w[i - 7]
-            + (rightRotate(w2, 17) ^ rightRotate(w2, 19) ^ (w2 >>> 10))
-          ) | 0);
-        var temp2 = (rightRotate(a, 2) ^ rightRotate(a, 13) ^ rightRotate(a, 22))
-          + ((a & hash[1]) ^ (a & hash[2]) ^ (hash[1] & hash[2]));
-        hash = [(temp1 + temp2) | 0].concat(hash);
-        hash[4] = (hash[4] + temp1) | 0;
-      }
-      for (i = 0; i < 8; i++) hash[i] = (hash[i] + oldHash[i]) | 0;
-    }
-    for (i = 0; i < 8; i++) {
-      for (j = 3; j + 1; j--) {
-        var b = (hash[i] >> (j * 8)) & 255;
-        result += (b < 16 ? "0" : "") + b.toString(16);
-      }
-    }
-    return result;
-  }
-
-  function utf8(value) {
-    var text = String(value);
-    if (window.TextEncoder) {
-      var bytes = new TextEncoder().encode(text);
-      var out = "";
-      for (var i = 0; i < bytes.length; i++) out += String.fromCharCode(bytes[i]);
-      return out;
-    }
-    return unescape(encodeURIComponent(text));
-  }
-
-  function digest(salt, password) {
-    return sha256(utf8(String(salt) + ":" + String(password)));
-  }
-
-  function randomSalt() {
-    var bytes = new Uint8Array(16);
-    if (window.crypto && crypto.getRandomValues) crypto.getRandomValues(bytes);
-    else {
-      for (var i = 0; i < bytes.length; i++) bytes[i] = Math.floor(Math.random() * 256);
-    }
-    var hex = "";
-    for (var n = 0; n < bytes.length; n++) hex += bytes[n].toString(16).padStart(2, "0");
-    return hex;
-  }
-
-  function makeId(prefix) {
-    return prefix + "-" + Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
-  }
-
-  function normalizeEmail(value) {
-    return String(value || "").trim().toLowerCase();
-  }
-
-  function isEmail(value) {
-    return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value);
-  }
-
-  function load() {
+  function legacyLessons() {
     try {
-      var raw = localStorage.getItem(KEY);
-      if (!raw) return empty();
-      var data = JSON.parse(raw);
-      return {
-        version: 2,
-        sessionId: data.sessionId || null,
-        users: Array.isArray(data.users) ? data.users : [],
-        enrollments: Array.isArray(data.enrollments) ? data.enrollments : [],
-        progress: data.progress && typeof data.progress === "object" ? data.progress : {},
-        videos: data.videos && typeof data.videos === "object" ? data.videos : {},
-        customLessons: Array.isArray(data.customLessons) ? data.customLessons : []
-      };
+      var raw = localStorage.getItem(LEGACY_KEY);
+      var data = raw ? JSON.parse(raw) : null;
+      return data && Array.isArray(data.customLessons) ? data.customLessons : [];
     } catch (error) {
-      return empty();
+      return [];
     }
   }
 
-  function save(state) {
-    localStorage.setItem(KEY, JSON.stringify(state));
-  }
-
-  function findUser(state, id) {
-    var found = null;
-    state.users.forEach(function (user) {
-      if (user.id === id) found = user;
-    });
-    return found;
-  }
-
-  function publicUser(user) {
-    if (!user) return null;
-    return {
-      id: user.id,
-      name: user.name,
-      email: user.email,
-      role: user.role,
-      createdAt: user.createdAt || 0
-    };
-  }
-
-  function ensureAdmin() {
-    var state = load();
-    var exists = state.users.some(function (user) { return user.role === "admin"; });
-    if (exists) return;
-    state.users.unshift({
-      id: "admin",
-      name: "관리자",
-      email: ADMIN_EMAIL,
-      salt: ADMIN_SALT,
-      hash: ADMIN_HASH,
-      role: "admin",
-      createdAt: Date.now()
-    });
-    save(state);
+  function forgetLegacy() {
+    try {
+      localStorage.removeItem(LEGACY_KEY);
+    } catch (error) {
+      return;
+    }
   }
 
   function ensureBase() {
@@ -194,9 +35,8 @@
   function applyLibrary() {
     ensureBase();
     if (!baseCourses || !window.VodCatalog) return;
-    var state = load();
     var courses = JSON.parse(JSON.stringify(baseCourses));
-    state.customLessons.forEach(function (item) {
+    lessonCache.forEach(function (item) {
       var course = null;
       courses.forEach(function (entry) {
         if (entry.id === item.courseId) course = entry;
@@ -214,7 +54,7 @@
       chapter.lessons.push({
         id: item.id,
         title: item.title,
-        seconds: meta && meta.seconds ? meta.seconds : item.seconds || 0,
+        seconds: meta && meta.seconds ? meta.seconds : 0,
         summary: item.summary,
         custom: true
       });
@@ -256,6 +96,7 @@
     progressCache = {};
     userCache = data && data.users ? data.users : [];
     videoCache = {};
+    lessonCache = data && data.lessons ? data.lessons : [];
     (data && data.videos ? data.videos : []).forEach(function (row) {
       videoCache[row.lessonId] = row;
     });
@@ -272,7 +113,13 @@
   function refresh() {
     return api("/api/session").then(function (data) {
       applySession(data && data.ok ? data : {});
-      return data;
+      var legacy = requireAdmin() ? legacyLessons() : [];
+      if (!legacy.length) return data;
+      return api("/api/lessons/import", { method: "POST", body: { lessons: legacy } }).then(function (result) {
+        if (!result.ok) return data;
+        forgetLegacy();
+        return refresh();
+      });
     });
   }
 
@@ -328,10 +175,11 @@
     };
   }
 
-  function rememberProgress(courseId, row) {
+  function rememberProgress(courseId, row, keepalive) {
     progressCache[courseId] = row;
     return api("/api/progress/" + encodeURIComponent(courseId), {
       method: "PUT",
+      keepalive: !!keepalive,
       body: {
         completed: row.completed,
         positions: row.positions,
@@ -358,14 +206,15 @@
     };
   }
 
-  function savePosition(courseId, lessonId, seconds) {
+  /* keepalive는 페이지를 떠날 때도 요청이 끝까지 가도록 합니다. */
+  function savePosition(courseId, lessonId, seconds, keepalive) {
     var user = getStudent();
     if (!user || !canWatch(courseId)) return;
     var row = getProgress(courseId);
     row.positions[lessonId] = Math.max(0, Math.floor(seconds || 0));
     row.lastLesson = lessonId;
     row.updatedAt = Date.now();
-    rememberProgress(courseId, row);
+    rememberProgress(courseId, row, keepalive);
   }
 
   function markComplete(courseId, lessonId) {
@@ -458,7 +307,13 @@
     var user = getStudent();
     if (!user) return "guest";
     if (user.role === "admin") return "admin";
-    return enrollmentStatus(courseId) || "none";
+    var row = enrollmentRow(courseId);
+    if (!row) return "none";
+    if (row.status !== "approved") return row.status;
+    var now = Date.now();
+    if (row.accessStart && now < row.accessStart) return "scheduled";
+    if (row.accessEnd && now > row.accessEnd) return "expired";
+    return "approved";
   }
 
   function canWatch(courseId) {
@@ -487,6 +342,8 @@
         status: row.status,
         createdAt: row.createdAt,
         reviewedAt: row.reviewedAt || 0,
+        accessStart: row.accessStart || 0,
+        accessEnd: row.accessEnd || 0,
         name: row.name || "알 수 없음",
         email: row.email || "",
         courseTitle: course ? course.title : "삭제된 강의"
@@ -494,10 +351,39 @@
     }).sort(function (a, b) { return b.createdAt - a.createdAt; });
   }
 
-  function setEnrollment(id, status) {
+  function setEnrollment(id, status, period) {
     if (!requireAdmin()) return Promise.resolve({ ok: false, message: "관리자만 수강 신청을 처리할 수 있습니다." });
     if (status !== "approved" && status !== "rejected") return Promise.resolve({ ok: false, message: "처리할 수 없는 상태입니다." });
-    return api("/api/enrollments/" + encodeURIComponent(id), { method: "PATCH", body: { status: status } }).then(function (data) {
+    var body = { status: status };
+    if (period) {
+      body.accessStart = period.accessStart || "";
+      body.accessEnd = period.accessEnd || "";
+    }
+    return api("/api/enrollments/" + encodeURIComponent(id), { method: "PATCH", body: body }).then(function (data) {
+      if (!data.ok) return data;
+      return refresh().then(function () { return { ok: true }; });
+    });
+  }
+
+  function grantEnrollment(userId, courseId, period) {
+    if (!requireAdmin()) return Promise.resolve({ ok: false, message: "관리자만 수강을 승인할 수 있습니다." });
+    return api("/api/admin/enrollments", {
+      method: "POST",
+      body: {
+        userId: userId,
+        courseId: courseId,
+        accessStart: period && period.accessStart ? period.accessStart : "",
+        accessEnd: period && period.accessEnd ? period.accessEnd : ""
+      }
+    }).then(function (data) {
+      if (!data.ok) return data;
+      return refresh().then(function () { return { ok: true }; });
+    });
+  }
+
+  function deleteUser(userId) {
+    if (!requireAdmin()) return Promise.resolve({ ok: false, message: "관리자만 회원을 삭제할 수 있습니다." });
+    return api("/api/users/" + encodeURIComponent(userId), { method: "DELETE" }).then(function (data) {
       if (!data.ok) return data;
       return refresh().then(function () { return { ok: true }; });
     });
@@ -506,35 +392,6 @@
   function listUsers() {
     if (!requireAdmin()) return [];
     return userCache;
-  }
-
-  function openMedia() {
-    if (mediaDbPromise) return mediaDbPromise;
-    mediaDbPromise = new Promise(function (resolve, reject) {
-      if (!window.indexedDB) {
-        reject(new Error("indexedDB"));
-        return;
-      }
-      var request = indexedDB.open("ncodelab-vod-media", 1);
-      request.onupgradeneeded = function () {
-        if (!request.result.objectStoreNames.contains("files")) request.result.createObjectStore("files");
-      };
-      request.onsuccess = function () { resolve(request.result); };
-      request.onerror = function () { reject(request.error); };
-    });
-    mediaDbPromise.then(null, function () { mediaDbPromise = null; });
-    return mediaDbPromise;
-  }
-
-  function withStore(mode, run) {
-    return openMedia().then(function (db) {
-      return new Promise(function (resolve, reject) {
-        var tx = db.transaction("files", mode);
-        var request = run(tx.objectStore("files"));
-        request.onsuccess = function () { resolve(request.result); };
-        request.onerror = function () { reject(request.error); };
-      });
-    });
   }
 
   function readDuration(file) {
@@ -563,19 +420,8 @@
     return videoCache[lessonId] || null;
   }
 
-  function courseIdOfLesson(lessonId) {
-    var found = "";
-    if (!window.VodCatalog) return found;
-    window.VodCatalog.courses.forEach(function (course) {
-      window.VodCatalog.lessonsOf(course).forEach(function (lesson) {
-        if (lesson.id === lessonId) found = course.id;
-      });
-    });
-    return found;
-  }
-
   function isCustomLesson(lessonId) {
-    return load().customLessons.some(function (item) { return item.id === lessonId; });
+    return lessonCache.some(function (item) { return item.id === lessonId; });
   }
 
   function knownLesson(lessonId) {
@@ -587,12 +433,6 @@
       });
     });
     return found;
-  }
-
-  function forgetUrl(lessonId) {
-    if (!urlCache[lessonId]) return;
-    URL.revokeObjectURL(urlCache[lessonId]);
-    delete urlCache[lessonId];
   }
 
   function getVideoUrl(lessonId) {
@@ -614,11 +454,11 @@
           fileName: file.name,
           contentType: contentType,
           size: file.size || 0,
-          seconds: seconds,
-          courseId: courseIdOfLesson(lessonId)
+          seconds: seconds
         }
       }).then(function (ticket) {
         if (!ticket.ok) return ticket;
+        contentType = ticket.contentType || contentType;
         return fetch(ticket.uploadUrl, {
           method: "PUT",
           headers: { "Content-Type": contentType },
@@ -632,8 +472,7 @@
               contentType: contentType,
               size: file.size || 0,
               seconds: seconds,
-              key: ticket.key,
-              courseId: courseIdOfLesson(lessonId)
+              key: ticket.key
             }
           });
         });
@@ -662,49 +501,33 @@
   }
 
   function addLesson(input) {
-    if (!requireAdmin()) return { ok: false, message: "관리자만 회차를 추가할 수 있습니다." };
-    var courseId = String(input.courseId || "");
-    var chapterTitle = String(input.chapterTitle || "").trim();
-    var title = String(input.title || "").trim().replace(/\s+/g, " ");
-    var summary = String(input.summary || "").trim();
-    if (!window.VodCatalog.byId(courseId)) return { ok: false, message: "강의를 선택해 주세요." };
-    if (!chapterTitle || chapterTitle.length > 40) return { ok: false, message: "챕터 이름을 40자 안으로 입력해 주세요." };
-    if (title.length < 2 || title.length > 60) return { ok: false, message: "회차 제목은 2자에서 60자 사이로 입력해 주세요." };
-    if (summary.length > 200) return { ok: false, message: "회차 설명은 200자 안으로 입력해 주세요." };
-    var state = load();
-    var lesson = {
-      id: makeId("lesson"),
-      courseId: courseId,
-      chapterTitle: chapterTitle,
-      title: title,
-      summary: summary || "관리자가 추가한 회차입니다.",
-      seconds: 0
-    };
-    state.customLessons.push(lesson);
-    save(state);
-    applyLibrary();
-    return { ok: true, id: lesson.id };
+    if (!requireAdmin()) return Promise.resolve({ ok: false, message: "관리자만 회차를 추가할 수 있습니다." });
+    return api("/api/lessons", {
+      method: "POST",
+      body: {
+        courseId: input.courseId,
+        chapterTitle: input.chapterTitle,
+        title: input.title,
+        summary: input.summary
+      }
+    }).then(function (created) {
+      if (!created.ok) return created;
+      return refresh().then(function () {
+        applyLibrary();
+        return { ok: true, id: created.id };
+      });
+    });
   }
 
   function removeLesson(lessonId) {
     if (!requireAdmin()) return Promise.resolve({ ok: false, message: "관리자만 회차를 삭제할 수 있습니다." });
-    var state = load();
-    var index = -1;
-    state.customLessons.forEach(function (item, itemIndex) {
-      if (item.id === lessonId) index = itemIndex;
-    });
-    if (index === -1) return Promise.resolve({ ok: false, message: "기본 회차는 삭제할 수 없습니다. 영상만 지울 수 있습니다." });
-    state.customLessons.splice(index, 1);
-    save(state);
-    var removeRemote = videoCache[lessonId]
-      ? api("/api/videos/" + encodeURIComponent(lessonId), { method: "DELETE" })
-      : Promise.resolve({ ok: true });
-    return removeRemote.then(function () {
+    return api("/api/lessons/" + encodeURIComponent(lessonId), { method: "DELETE" }).then(function (result) {
+      if (!result.ok) return result;
       delete videoCache[lessonId];
-      return refresh();
-    }).then(function () {
-      applyLibrary();
-      return { ok: true };
+      return refresh().then(function () {
+        applyLibrary();
+        return { ok: true };
+      });
     });
   }
 
@@ -734,6 +557,8 @@
     applyCourse: applyCourse,
     listEnrollments: listEnrollments,
     setEnrollment: setEnrollment,
+    grantEnrollment: grantEnrollment,
+    deleteUser: deleteUser,
     listUsers: listUsers,
     videoMeta: videoMeta,
     isCustomLesson: isCustomLesson,

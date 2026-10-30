@@ -84,7 +84,7 @@
         adminLink = nav.querySelector("[data-admin-nav]");
       }
       if (adminLink && /admin\.html$/.test(location.pathname)) adminLink.setAttribute("aria-current", "page");
-      if (!tool) slot.insertAdjacentHTML("beforebegin", '<a class="tool-link" id="admin-tool" href="admin.html">영상 관리</a>');
+      if (!tool) slot.insertAdjacentHTML("beforebegin", '<a class="tool-link" id="admin-tool" href="admin.html">대시보드</a>');
       slot.innerHTML =
         '<a class="account-btn" href="admin.html">' + esc(student.name) + " 님</a>" +
         '<button type="button" class="account-btn" data-logout>로그아웃</button>';
