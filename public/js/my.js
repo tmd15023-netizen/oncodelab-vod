@@ -29,6 +29,34 @@
     return "course.html?id=" + encodeURIComponent(course.id);
   }
 
+  function seoulDay(timestamp) {
+    return new Intl.DateTimeFormat("en-CA", {
+      timeZone: "Asia/Seoul",
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit"
+    }).format(new Date(timestamp));
+  }
+
+  function periodLine(course) {
+    var row = window.VodStore.enrollmentFor(course.id);
+    if (!row || row.status !== "approved" || (!row.accessStart && !row.accessEnd)) return "";
+    var start = row.accessStart ? seoulDay(row.accessStart).replace(/-/g, ".") : "승인 즉시";
+    var end = row.accessEnd ? seoulDay(row.accessEnd).replace(/-/g, ".") : "종료일 없음";
+    var remain = "";
+    if (row.accessEnd) {
+      var today = seoulDay(Date.now());
+      var endDay = seoulDay(row.accessEnd);
+      if (today > endDay) remain = "기간 종료";
+      else if (today === endDay) remain = "오늘까지";
+      else {
+        var days = Math.round((Date.parse(endDay + "T00:00:00+09:00") - Date.parse(today + "T00:00:00+09:00")) / 86400000);
+        remain = days + "일 남음";
+      }
+    }
+    return "수강기간 " + start + " ~ " + end + (remain ? " (" + remain + ")" : "");
+  }
+
   function rowLabel(course, point) {
     var access = window.VodStore.accessState(course.id);
     if (access === "approved" || access === "admin") return point.label;
@@ -75,6 +103,10 @@
       '<a class="mini-thumb' + (item.course.coverUrl ? " has-photo" : "") + " tone-" + window.VodUI.esc(item.course.tone) + '" href="course.html?id=' + encodeURIComponent(item.course.id) + '" aria-label="' + window.VodUI.esc(item.course.title) + '"' + (item.course.coverUrl ? ' style="background-image:url(\'' + window.VodUI.esc(item.course.coverUrl) + '\')"' : "") + "></a>" +
       '<a class="progress-copy" href="course.html?id=' + encodeURIComponent(item.course.id) + '">' +
         "<strong>" + window.VodUI.esc(item.course.title) + "</strong>" +
+        (function () {
+          var period = periodLine(item.course);
+          return period ? '<p class="access-period">' + window.VodUI.esc(period) + "</p>" : "";
+        })() +
         "<p>" + item.state.done + " / " + item.state.total + "강 완료 · " + statusText(item.course) + "</p>" +
         '<div class="bar" aria-hidden="true"><span style="width:' + item.state.percent + '%"></span></div>' +
       "</a>" +

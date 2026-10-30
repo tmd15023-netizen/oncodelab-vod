@@ -330,6 +330,16 @@
     return row ? row.status : "";
   }
 
+  function enrollmentFor(courseId) {
+    var row = enrollmentRow(courseId);
+    if (!row) return null;
+    return {
+      status: row.status,
+      accessStart: row.accessStart || 0,
+      accessEnd: row.accessEnd || 0
+    };
+  }
+
   function accessState(courseId) {
     var user = getStudent();
     if (!user) return "guest";
@@ -685,6 +695,7 @@
     resumeCourse: resumeCourse,
     summary: summary,
     enrollmentStatus: enrollmentStatus,
+    enrollmentFor: enrollmentFor,
     accessState: accessState,
     canWatch: canWatch,
     applyCourse: applyCourse,

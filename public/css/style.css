@@ -837,6 +837,12 @@ button.course-card {
 
 .progress-copy { color: inherit; text-decoration: none; }
 .progress-copy p { margin: 2px 0 8px; color: var(--muted); font-size: 13px; }
+.progress-copy p.access-period {
+  margin: 4px 0 2px;
+  color: var(--blue);
+  font-size: 14px;
+  font-weight: 800;
+}
 
 .recent-list a {
   display: flex;
