@@ -41,17 +41,26 @@ const uri = process.env.MONGODB_URI;
 const dbName = process.env.MONGODB_DB || "VOD";
 const port = Number(process.env.PORT) || 3000;
 
-if (!uri || uri.includes("USER:PASSWORD")) {
-  console.error("MONGODB_URI가 없습니다. .env 파일에 Atlas 접속 주소를 넣어 주세요.");
-  process.exit(1);
+function missingDatabaseConfig() {
+  return !uri || uri.includes("USER:PASSWORD");
 }
 
 const app = express();
-const client = new MongoClient(uri);
+const client = missingDatabaseConfig() ? null : new MongoClient(uri);
 const sessionSecret = process.env.SESSION_SECRET || randomBytes(32).toString("hex");
 let db;
 
 app.use(express.json({ limit: "32kb" }));
+
+app.use(function (req, res, next) {
+  if (req.path.indexOf("/api/") !== 0) return next();
+  startDatabase().then(function () {
+    next();
+  }).catch(function () {
+    console.error("MongoDB에 접속하지 못했습니다.");
+    res.status(500).json({ ok: false, message: "데이터베이스에 연결하지 못했습니다." });
+  });
+});
 
 async function ensureIndexes(database) {
   await database.collection("users").createIndex({ email: 1 }, { unique: true });
@@ -106,7 +115,7 @@ async function ensureR2Cors() {
       Bucket: r2Bucket,
       CORSConfiguration: {
         CORSRules: [{
-          AllowedOrigins: ["http://localhost:3000"],
+          AllowedOrigins: r2Origins(),
           AllowedMethods: ["GET", "PUT", "HEAD"],
           AllowedHeaders: ["*"],
           ExposeHeaders: ["ETag"],
@@ -115,8 +124,57 @@ async function ensureR2Cors() {
       }
     }));
   } catch (error) {
-    console.error("R2 CORS 설정을 건너뛰었습니다. 버킷 CORS에 http://localhost:3000 을 허용해 주세요.");
+    console.error("R2 CORS 설정을 건너뛰었습니다. 버킷 설정에서 사이트 주소를 허용해 주세요.");
   }
+}
+
+function r2Origins() {
+  const origins = ["http://localhost:3000", "https://oncodelab-vod.vercel.app"];
+  if (process.env.VERCEL_PROJECT_PRODUCTION_URL) {
+    origins.push("https://" + process.env.VERCEL_PROJECT_PRODUCTION_URL);
+  }
+  if (process.env.VERCEL_URL) {
+    origins.push("https://" + process.env.VERCEL_URL);
+  }
+  return origins.filter(function (item, index) {
+    return origins.indexOf(item) === index;
+  });
+}
+
+async function ensureAdmin(database) {
+  const admin = await database.collection("users").findOne({ role: "admin" });
+  const adminPassword = process.env.ADMIN_PASSWORD;
+  if (admin || !adminPassword) return;
+  const salt = randomBytes(16).toString("hex");
+  await database.collection("users").insertOne({
+    name: "관리자",
+    email: "admin@ncodelab.kr",
+    passwordSalt: salt,
+    passwordHash: hashPassword(adminPassword, salt),
+    role: "admin",
+    createdAt: new Date()
+  });
+}
+
+let starting = null;
+
+function startDatabase() {
+  if (db) return Promise.resolve(db);
+  if (!client || missingDatabaseConfig()) return Promise.reject(new Error("missing-uri"));
+  if (!starting) {
+    starting = client.connect().then(async function () {
+      db = client.db(dbName);
+      await db.command({ ping: 1 });
+      await ensureIndexes(db);
+      await ensureR2Cors();
+      await ensureAdmin(db);
+      return db;
+    }).catch(function () {
+      starting = null;
+      return Promise.reject(new Error("connect-failed"));
+    });
+  }
+  return starting;
 }
 
 function hashPassword(password, salt) {
@@ -153,12 +211,17 @@ function readSession(req) {
   return userId;
 }
 
+function writeSessionCookie(res, value, maxAge) {
+  const secure = process.env.VERCEL ? "; Secure" : "";
+  res.setHeader("Set-Cookie", "vod_session=" + value + "; HttpOnly; Path=/; Max-Age=" + maxAge + "; SameSite=Lax" + secure);
+}
+
 function setSession(res, userId) {
-  res.setHeader("Set-Cookie", "vod_session=" + encodeURIComponent(signSession(userId)) + "; HttpOnly; Path=/; Max-Age=1209600; SameSite=Lax");
+  writeSessionCookie(res, encodeURIComponent(signSession(userId)), 1209600);
 }
 
 function clearSession(res) {
-  res.setHeader("Set-Cookie", "vod_session=; HttpOnly; Path=/; Max-Age=0; SameSite=Lax");
+  writeSessionCookie(res, "", 0);
 }
 
 function publicUser(user) {
@@ -452,31 +515,18 @@ app.delete("/api/videos/:lessonId", async function (req, res) {
   res.json({ ok: true });
 });
 
-app.use(express.static(path.join(__dirname)));
+app.use(express.static(path.join(__dirname, "public")));
 
-client.connect().then(async function () {
-  db = client.db(dbName);
-  await db.command({ ping: 1 });
-  await ensureIndexes(db);
-  await ensureR2Cors();
-  const admin = await db.collection("users").findOne({ role: "admin" });
-  if (!admin) {
-    const salt = randomBytes(16).toString("hex");
-    await db.collection("users").insertOne({
-      name: "관리자",
-      email: "admin@ncodelab.kr",
-      passwordSalt: salt,
-      passwordHash: hashPassword("OncodeAdmin2026!", salt),
-      role: "admin",
-      createdAt: new Date()
+module.exports = app;
+
+if (!process.env.VERCEL) {
+  startDatabase().then(function () {
+    app.listen(port, function () {
+      console.log("VOD 서버가 http://localhost:" + port + " 에서 실행 중입니다.");
+      console.log("MongoDB 데이터베이스: " + db.databaseName);
     });
-  }
-  app.listen(port, function () {
-    console.log("VOD 서버가 http://localhost:" + port + " 에서 실행 중입니다.");
-    console.log("MongoDB 데이터베이스: " + db.databaseName);
+  }).catch(function () {
+    console.error("MongoDB에 접속하지 못했습니다. .env의 MONGODB_URI를 확인해 주세요.");
+    process.exit(1);
   });
-}).catch(function (error) {
-  console.error("MongoDB에 접속하지 못했습니다.");
-  console.error(error.message);
-  process.exit(1);
-});
+}
