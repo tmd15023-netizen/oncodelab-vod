@@ -250,9 +250,20 @@
   });
 
   document.addEventListener("keydown", function (event) {
-    if ((event.ctrlKey || event.metaKey) && !event.altKey && (event.key === "s" || event.key === "S")) {
+    if ((event.ctrlKey || event.metaKey) && !event.altKey && (event.code === "KeyS" || event.key === "s" || event.key === "S")) {
       event.preventDefault();
     }
+  }, true);
+
+  document.addEventListener("contextmenu", function (event) {
+    if (event.target.closest("input, textarea, select, [contenteditable='true']")) return;
+    event.preventDefault();
+  }, true);
+
+  document.addEventListener("dragstart", function (event) {
+    var node = event.target;
+    if (!node || !node.closest) return;
+    if (node.closest("img, video, .thumb, .art-card, .mini-thumb")) event.preventDefault();
   }, true);
 
   document.addEventListener("keydown", function (event) {
