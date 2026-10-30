@@ -98,6 +98,7 @@ async function ensureIndexes(database) {
   await database.collection("videos").createIndex({ lessonId: 1 }, { unique: true });
   await database.collection("lessons").createIndex({ lessonId: 1 }, { unique: true });
   await database.collection("coursePages").createIndex({ courseId: 1 }, { unique: true });
+  await database.collection("courses").createIndex({ courseId: 1 }, { unique: true });
 }
 
 const baseLessonCourse = {};
@@ -111,15 +112,22 @@ function isId(value) {
   return typeof value === "string" && /^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$/.test(value);
 }
 
-function courseExists(courseId) {
-  return isId(courseId) && !!catalog.byId(courseId);
+async function courseExists(courseId) {
+  if (!isId(courseId)) return false;
+  const row = await db.collection("courses").findOne({ courseId: courseId }, { projection: { _id: 1 } });
+  return !!row;
 }
 
 async function lessonCourse(lessonId) {
   if (!isId(lessonId)) return "";
-  if (baseLessonCourse[lessonId]) return baseLessonCourse[lessonId];
+  const course = await db.collection("courses").findOne(
+    { "chapters.lessons.id": lessonId },
+    { projection: { courseId: 1 } }
+  );
+  if (course) return course.courseId;
   const row = await db.collection("lessons").findOne({ lessonId: lessonId });
-  return row ? row.courseId : "";
+  if (row && await courseExists(row.courseId)) return row.courseId;
+  return "";
 }
 
 const r2Bucket = process.env.R2_BUCKET || "oncodelab-vod";
@@ -174,11 +182,192 @@ function clipLines(value, count, max) {
 const COVER_EXT = { "image/jpeg": "jpg", "image/png": "png", "image/webp": "webp" };
 const COVER_BYTES = 5 * 1024 * 1024;
 
+const COURSE_TONES = ["violet", "blue", "coral", "teal", "ink"];
+
+async function ensureCourseCatalog(database) {
+  const meta = database.collection("meta");
+  const state = await meta.findOne({ _id: "catalog" });
+  if (state && state.seeded) return;
+  const pages = await database.collection("coursePages").find({}).toArray();
+  const pageById = {};
+  pages.forEach(function (page) { pageById[page.courseId] = page; });
+  const extraLessons = await database.collection("lessons").find({}).sort({ createdAt: 1 }).toArray();
+  for (const course of catalog.courses) {
+    const page = pageById[course.id] || {};
+    const chapters = course.chapters.map(function (chapter) {
+      return {
+        title: chapter.title,
+        lessons: chapter.lessons.map(function (lesson) {
+          return {
+            id: lesson.id,
+            title: lesson.title,
+            summary: lesson.summary || "",
+            seconds: lesson.seconds || 0
+          };
+        })
+      };
+    });
+    extraLessons.forEach(function (lesson) {
+      if (lesson.courseId !== course.id) return;
+      let chapter = null;
+      chapters.forEach(function (item) {
+        if (item.title === lesson.chapterTitle) chapter = item;
+      });
+      if (!chapter) {
+        chapter = { title: lesson.chapterTitle, lessons: [] };
+        chapters.push(chapter);
+      }
+      if (!chapter.lessons.some(function (item) { return item.id === lesson.lessonId; })) {
+        chapter.lessons.push({
+          id: lesson.lessonId,
+          title: lesson.title,
+          summary: lesson.summary || "",
+          seconds: 0
+        });
+      }
+    });
+    await database.collection("courses").updateOne(
+      { courseId: course.id },
+      {
+        $setOnInsert: {
+          courseId: course.id,
+          category: page.category || course.category,
+          tone: course.tone || "violet",
+          featured: course.featured !== false,
+          pathLabel: (page.thumbLines && page.thumbLines[0]) || course.pathLabel || course.title,
+          title: page.title || course.title,
+          summary: page.summary || course.summary,
+          audience: page.audience || course.audience,
+          goals: page.goals && page.goals.length ? page.goals : course.goals,
+          thumbLines: page.thumbLines && page.thumbLines.length ? page.thumbLines : course.thumbLines,
+          chapters: chapters,
+          coverKey: page.coverKey || "",
+          coverType: page.coverType || "",
+          coverSize: page.coverSize || 0,
+          createdAt: new Date(),
+          updatedAt: page.updatedAt || new Date()
+        }
+      },
+      { upsert: true }
+    );
+  }
+  await meta.updateOne({ _id: "catalog" }, { $set: { seeded: true, seededAt: new Date() } }, { upsert: true });
+}
+
+async function coverUrlFor(key) {
+  if (!key || !r2Ready()) return "";
+  return getSignedUrl(r2(), new GetObjectCommand({
+    Bucket: r2Bucket,
+    Key: key
+  }), { expiresIn: 60 * 60 * 4 });
+}
+
+function publicChapter(chapter) {
+  return {
+    title: chapter.title || "",
+    lessons: (chapter.lessons || []).map(function (lesson) {
+      return {
+        id: lesson.id,
+        title: lesson.title || "",
+        summary: lesson.summary || "",
+        seconds: lesson.seconds || 0
+      };
+    })
+  };
+}
+
+async function publicCatalog() {
+  const rows = await db.collection("courses").find({}).sort({ createdAt: 1, title: 1 }).toArray();
+  const list = [];
+  for (const row of rows) {
+    list.push({
+      id: row.courseId,
+      category: row.category || "강의",
+      tone: row.tone || "violet",
+      featured: row.featured !== false,
+      pathLabel: row.pathLabel || row.title || "",
+      title: row.title || "",
+      summary: row.summary || "",
+      audience: row.audience || "",
+      goals: Array.isArray(row.goals) ? row.goals : [],
+      thumbLines: Array.isArray(row.thumbLines) && row.thumbLines.length ? row.thumbLines : [row.title || "강의"],
+      coverUrl: await coverUrlFor(row.coverKey),
+      chapters: (row.chapters || []).map(publicChapter)
+    });
+  }
+  return list;
+}
+
+async function pushLesson(courseId, chapterTitle, lesson) {
+  const course = await db.collection("courses").findOne({ courseId: courseId });
+  if (!course) return false;
+  const chapters = Array.isArray(course.chapters) ? course.chapters : [];
+  let chapter = null;
+  chapters.forEach(function (item) {
+    if (item.title === chapterTitle) chapter = item;
+  });
+  if (!chapter) {
+    chapter = { title: chapterTitle, lessons: [] };
+    chapters.push(chapter);
+  }
+  chapter.lessons = chapter.lessons || [];
+  if (!chapter.lessons.some(function (item) { return item.id === lesson.id; })) {
+    chapter.lessons.push({
+      id: lesson.id,
+      title: lesson.title,
+      summary: lesson.summary || "",
+      seconds: lesson.seconds || 0
+    });
+  }
+  await db.collection("courses").updateOne(
+    { courseId: courseId },
+    { $set: { chapters: chapters, updatedAt: new Date() } }
+  );
+  return true;
+}
+
+async function detachLesson(lessonId) {
+  const rows = await db.collection("courses").find({ "chapters.lessons.id": lessonId }).toArray();
+  for (const course of rows) {
+    const chapters = (course.chapters || []).map(function (chapter) {
+      return {
+        title: chapter.title,
+        lessons: (chapter.lessons || []).filter(function (lesson) { return lesson.id !== lessonId; })
+      };
+    });
+    await db.collection("courses").updateOne(
+      { _id: course._id },
+      { $set: { chapters: chapters, updatedAt: new Date() } }
+    );
+  }
+}
+
+async function deleteCourseBundle(courseId) {
+  const course = await db.collection("courses").findOne({ courseId: courseId });
+  if (!course) return false;
+  const lessonIds = [];
+  (course.chapters || []).forEach(function (chapter) {
+    (chapter.lessons || []).forEach(function (lesson) {
+      if (lesson.id) lessonIds.push(lesson.id);
+    });
+  });
+  for (const lessonId of lessonIds) await deleteVideo(lessonId);
+  await db.collection("lessons").deleteMany({ courseId: courseId });
+  if (course.coverKey && r2Ready()) {
+    await r2().send(new DeleteObjectCommand({ Bucket: r2Bucket, Key: course.coverKey }));
+  }
+  await db.collection("enrollments").deleteMany({ courseId: courseId });
+  await db.collection("progress").deleteMany({ courseId: courseId });
+  await db.collection("coursePages").deleteOne({ courseId: courseId });
+  await db.collection("courses").deleteOne({ courseId: courseId });
+  return true;
+}
+
 async function coursePages() {
   const rows = await db.collection("coursePages").find({}).toArray();
   const pages = [];
   for (const row of rows) {
-    if (!courseExists(row.courseId)) continue;
+    if (!await courseExists(row.courseId)) continue;
     let coverUrl = "";
     if (row.coverKey && r2Ready()) {
       coverUrl = await getSignedUrl(r2(), new GetObjectCommand({
@@ -257,6 +446,7 @@ function startDatabase() {
       const database = client.db(dbName);
       await database.command({ ping: 1 });
       await ensureIndexes(database);
+      await ensureCourseCatalog(database);
       await ensureAdmin(database);
       db = database;
       return db;
@@ -448,13 +638,13 @@ async function enrollmentList(user) {
 }
 
 /* 관리자가 추가하는 회차의 입력값을 확인합니다. 오류가 있으면 문자열을 돌려줍니다. */
-function cleanLesson(input) {
+async function cleanLesson(input) {
   const body = input || {};
   const courseId = String(body.courseId || "");
   const chapterTitle = String(body.chapterTitle || "").trim();
   const title = String(body.title || "").trim().replace(/\s+/g, " ");
   const summary = String(body.summary || "").trim();
-  if (!courseExists(courseId)) return "강의를 선택해 주세요.";
+  if (!await courseExists(courseId)) return "강의를 선택해 주세요.";
   if (!chapterTitle || chapterTitle.length > 40) return "챕터 이름을 40자 안으로 입력해 주세요.";
   if (title.length < 2 || title.length > 60) return "회차 제목은 2자에서 60자 사이로 입력해 주세요.";
   if (summary.length > 200) return "회차 설명은 200자 안으로 입력해 주세요.";
@@ -491,7 +681,7 @@ app.get("/api/session", route(async function (req, res) {
   const isAdmin = !!(user && user.role === "admin");
   const lessons = await db.collection("lessons").find({}).sort({ createdAt: 1 }).toArray();
   const videos = await db.collection("videos").find({}, { projection: { key: 0 } }).toArray();
-  const pages = await coursePages();
+  const catalogList = await publicCatalog();
   if (!user) {
     res.json({
       ok: true,
@@ -501,7 +691,8 @@ app.get("/api/session", route(async function (req, res) {
       users: [],
       lessons: lessons.map(publicLesson),
       videos: videos.map(function (row) { return publicVideo(row, false); }),
-      courses: pages
+      courses: catalogList,
+      catalog: catalogList
     });
     return;
   }
@@ -518,7 +709,8 @@ app.get("/api/session", route(async function (req, res) {
     lessons: lessons.map(publicLesson),
     videos: videos.map(function (row) { return publicVideo(row, isAdmin); }),
     users: users,
-    courses: pages
+    courses: catalogList,
+    catalog: catalogList
   });
 }));
 
@@ -584,7 +776,7 @@ app.post("/api/enrollments", route(async function (req, res) {
   if (!user) return res.status(401).json({ ok: false, message: "로그인 후 수강 신청할 수 있습니다." });
   if (user.role === "admin") return res.status(400).json({ ok: false, message: "관리자 계정은 승인 없이 영상을 볼 수 있습니다." });
   const courseId = String((req.body && req.body.courseId) || "");
-  if (!courseExists(courseId)) return res.status(400).json({ ok: false, message: "강의를 찾을 수 없습니다." });
+  if (!await courseExists(courseId)) return res.status(400).json({ ok: false, message: "강의를 찾을 수 없습니다." });
   const existing = await db.collection("enrollments").findOne({ userId: user._id, courseId: courseId });
   if (existing && existing.status === "approved") return res.json({ ok: true, status: "approved", message: "이미 승인된 강의입니다." });
   if (existing && existing.status === "pending") return res.json({ ok: true, status: "pending", message: "이미 수강 신청이 접수되었습니다." });
@@ -636,7 +828,7 @@ app.post("/api/admin/enrollments", route(async function (req, res) {
   const userId = String(body.userId || "");
   const courseId = String(body.courseId || "");
   if (!ObjectId.isValid(userId)) return res.status(400).json({ ok: false, message: "회원을 선택해 주세요." });
-  if (!courseExists(courseId)) return res.status(400).json({ ok: false, message: "강의를 찾을 수 없습니다." });
+  if (!await courseExists(courseId)) return res.status(400).json({ ok: false, message: "강의를 찾을 수 없습니다." });
   const student = await db.collection("users").findOne({ _id: new ObjectId(userId) });
   if (!student || student.role !== "student") return res.status(400).json({ ok: false, message: "수강생 계정을 선택해 주세요." });
   const bounds = accessUpdate(body);
@@ -690,7 +882,7 @@ app.put("/api/progress/:courseId", route(async function (req, res) {
   const user = await currentUser(req);
   if (!user) return res.status(401).json({ ok: false, message: "로그인이 필요합니다." });
   const courseId = String(req.params.courseId || "");
-  if (!courseExists(courseId)) return res.status(404).json({ ok: false, message: "강의를 찾을 수 없습니다." });
+  if (!await courseExists(courseId)) return res.status(404).json({ ok: false, message: "강의를 찾을 수 없습니다." });
   const enrollment = user.role === "admin" ? { status: "approved" } : await db.collection("enrollments").findOne({ userId: user._id, courseId: courseId });
   if (!accessOpen(enrollment)) return res.status(403).json({ ok: false, message: "수강 기간 안의 승인된 강의만 진도가 저장됩니다." });
   const body = req.body || {};
@@ -725,11 +917,17 @@ app.delete("/api/progress", route(async function (req, res) {
 
 app.post("/api/lessons", route(async function (req, res) {
   if (!await requireAdminUser(req, res, "관리자만 회차를 추가할 수 있습니다.")) return;
-  const lesson = cleanLesson(req.body);
+  const lesson = await cleanLesson(req.body);
   if (typeof lesson === "string") return res.status(400).json({ ok: false, message: lesson });
   lesson.lessonId = "lesson-" + Date.now().toString(36) + randomBytes(4).toString("hex");
   lesson.createdAt = new Date();
   await db.collection("lessons").insertOne(lesson);
+  await pushLesson(lesson.courseId, lesson.chapterTitle, {
+    id: lesson.lessonId,
+    title: lesson.title,
+    summary: lesson.summary,
+    seconds: 0
+  });
   res.json({ ok: true, id: lesson.lessonId });
 }));
 
@@ -740,14 +938,22 @@ app.post("/api/lessons/import", route(async function (req, res) {
   let imported = 0;
   for (const row of rows) {
     const lessonId = String((row && row.id) || "");
-    const lesson = cleanLesson(row);
+    const lesson = await cleanLesson(row);
     if (!/^lesson-[a-z0-9]{1,40}$/.test(lessonId) || typeof lesson === "string") continue;
     const result = await db.collection("lessons").updateOne(
       { lessonId: lessonId },
       { $setOnInsert: Object.assign(lesson, { lessonId: lessonId, createdAt: new Date() }) },
       { upsert: true }
     );
-    if (result.upsertedCount) imported += 1;
+    if (result.upsertedCount) {
+      imported += 1;
+      await pushLesson(lesson.courseId, lesson.chapterTitle, {
+        id: lessonId,
+        title: lesson.title,
+        summary: lesson.summary,
+        seconds: 0
+      });
+    }
   }
   res.json({ ok: true, imported: imported });
 }));
@@ -755,9 +961,12 @@ app.post("/api/lessons/import", route(async function (req, res) {
 app.delete("/api/lessons/:lessonId", route(async function (req, res) {
   if (!await requireAdminUser(req, res, "관리자만 회차를 삭제할 수 있습니다.")) return;
   const lessonId = String(req.params.lessonId || "");
-  const lesson = isId(lessonId) ? await db.collection("lessons").findOne({ lessonId: lessonId }) : null;
-  if (!lesson) return res.status(404).json({ ok: false, message: "기본 회차는 삭제할 수 없습니다. 영상만 지울 수 있습니다." });
+  if (!isId(lessonId)) return res.status(404).json({ ok: false, message: "회차를 찾을 수 없습니다." });
+  const course = await db.collection("courses").findOne({ "chapters.lessons.id": lessonId }, { projection: { _id: 1 } });
+  const custom = await db.collection("lessons").findOne({ lessonId: lessonId }, { projection: { _id: 1 } });
+  if (!course && !custom) return res.status(404).json({ ok: false, message: "회차를 찾을 수 없습니다." });
   await deleteVideo(lessonId);
+  await detachLesson(lessonId);
   await db.collection("lessons").deleteOne({ lessonId: lessonId });
   res.json({ ok: true });
 }));
@@ -847,7 +1056,7 @@ app.delete("/api/videos/:lessonId", route(async function (req, res) {
 app.patch("/api/courses/:id", route(async function (req, res) {
   if (!await requireAdminUser(req, res, "관리자만 강의 소개를 수정할 수 있습니다.")) return;
   const courseId = String(req.params.id || "");
-  if (!courseExists(courseId)) return res.status(404).json({ ok: false, message: "강의를 찾을 수 없습니다." });
+  if (!await courseExists(courseId)) return res.status(404).json({ ok: false, message: "강의를 찾을 수 없습니다." });
   const body = req.body || {};
   const title = clipText(body.title, 80);
   const summary = clipText(body.summary, 300);
@@ -861,22 +1070,64 @@ app.patch("/api/courses/:id", route(async function (req, res) {
   if (!category) return res.status(400).json({ ok: false, message: "분류를 입력해 주세요." });
   if (!goals.length) return res.status(400).json({ ok: false, message: "학습 목표를 한 줄 이상 입력해 주세요." });
   if (!thumbLines.length) return res.status(400).json({ ok: false, message: "이미지 없을 때 표시할 문구를 입력해 주세요." });
-  await db.collection("coursePages").updateOne(
+  await db.collection("courses").updateOne(
     { courseId: courseId },
     {
       $set: {
-        courseId: courseId,
         title: title,
         summary: summary,
         audience: audience,
         category: category,
         goals: goals,
         thumbLines: thumbLines,
+        pathLabel: thumbLines[0] || title,
         updatedAt: new Date()
       }
-    },
-    { upsert: true }
+    }
   );
+  res.json({ ok: true });
+}));
+
+app.post("/api/courses", route(async function (req, res) {
+  if (!await requireAdminUser(req, res, "관리자만 강의를 추가할 수 있습니다.")) return;
+  const body = req.body || {};
+  const title = clipText(body.title, 80);
+  const summary = clipText(body.summary, 300);
+  const audience = clipText(body.audience, 200) || "수강 신청 후 볼 수 있는 강의입니다.";
+  const category = clipText(body.category, 20) || "강의";
+  const goals = clipLines(body.goals, 8, 120);
+  const thumbLines = clipLines(body.thumbLines, 3, 24);
+  if (title.length < 2) return res.status(400).json({ ok: false, message: "강의 제목은 두 글자 이상 입력해 주세요." });
+  if (!summary) return res.status(400).json({ ok: false, message: "강의 소개를 입력해 주세요." });
+  const count = await db.collection("courses").countDocuments();
+  const courseId = "course-" + randomBytes(4).toString("hex");
+  const lines = thumbLines.length ? thumbLines : [title.slice(0, 24)];
+  await db.collection("courses").insertOne({
+    courseId: courseId,
+    category: category,
+    tone: COURSE_TONES[count % COURSE_TONES.length],
+    featured: true,
+    pathLabel: lines[0],
+    title: title,
+    summary: summary,
+    audience: audience,
+    goals: goals.length ? goals : [summary],
+    thumbLines: lines,
+    chapters: [],
+    coverKey: "",
+    coverType: "",
+    coverSize: 0,
+    createdAt: new Date(),
+    updatedAt: new Date()
+  });
+  res.json({ ok: true, id: courseId });
+}));
+
+app.delete("/api/courses/:id", route(async function (req, res) {
+  if (!await requireAdminUser(req, res, "관리자만 강의를 삭제할 수 있습니다.")) return;
+  const courseId = String(req.params.id || "");
+  if (!await courseExists(courseId)) return res.status(404).json({ ok: false, message: "강의를 찾을 수 없습니다." });
+  await deleteCourseBundle(courseId);
   res.json({ ok: true });
 }));
 
@@ -884,7 +1135,7 @@ app.post("/api/courses/:id/cover/upload", route(async function (req, res) {
   if (!await requireAdminUser(req, res, "관리자만 이미지를 올릴 수 있습니다.")) return;
   if (!r2Ready()) return res.status(503).json({ ok: false, message: "이미지 저장소 연결 정보가 없습니다. .env의 R2 값을 확인해 주세요." });
   const courseId = String(req.params.id || "");
-  if (!courseExists(courseId)) return res.status(404).json({ ok: false, message: "강의를 찾을 수 없습니다." });
+  if (!await courseExists(courseId)) return res.status(404).json({ ok: false, message: "강의를 찾을 수 없습니다." });
   const contentType = String((req.body && req.body.contentType) || "");
   const ext = COVER_EXT[contentType];
   const size = Number(req.body && req.body.size) || 0;
@@ -902,7 +1153,7 @@ app.post("/api/courses/:id/cover/upload", route(async function (req, res) {
 app.post("/api/courses/:id/cover/complete", route(async function (req, res) {
   if (!await requireAdminUser(req, res, "관리자만 이미지를 올릴 수 있습니다.")) return;
   const courseId = String(req.params.id || "");
-  if (!courseExists(courseId)) return res.status(404).json({ ok: false, message: "강의를 찾을 수 없습니다." });
+  if (!await courseExists(courseId)) return res.status(404).json({ ok: false, message: "강의를 찾을 수 없습니다." });
   const body = req.body || {};
   const contentType = String(body.contentType || "");
   const ext = COVER_EXT[contentType];
@@ -910,19 +1161,10 @@ app.post("/api/courses/:id/cover/complete", route(async function (req, res) {
   const size = Number(body.size) || 0;
   if (!ext || key !== "covers/" + courseId + "." + ext) return res.status(400).json({ ok: false, message: "이미지 위치가 올바르지 않습니다." });
   if (size <= 0 || size > COVER_BYTES) return res.status(400).json({ ok: false, message: "이미지는 5MB 이하로 올려 주세요." });
-  const existing = await db.collection("coursePages").findOne({ courseId: courseId });
-  await db.collection("coursePages").updateOne(
+  const existing = await db.collection("courses").findOne({ courseId: courseId });
+  await db.collection("courses").updateOne(
     { courseId: courseId },
-    {
-      $set: {
-        courseId: courseId,
-        coverKey: key,
-        coverType: contentType,
-        coverSize: size,
-        updatedAt: new Date()
-      }
-    },
-    { upsert: true }
+    { $set: { coverKey: key, coverType: contentType, coverSize: size, updatedAt: new Date() } }
   );
   if (existing && existing.coverKey && existing.coverKey !== key && r2Ready()) {
     await r2().send(new DeleteObjectCommand({ Bucket: r2Bucket, Key: existing.coverKey }));
@@ -933,15 +1175,15 @@ app.post("/api/courses/:id/cover/complete", route(async function (req, res) {
 app.delete("/api/courses/:id/cover", route(async function (req, res) {
   if (!await requireAdminUser(req, res, "관리자만 이미지를 지울 수 있습니다.")) return;
   const courseId = String(req.params.id || "");
-  if (!courseExists(courseId)) return res.status(404).json({ ok: false, message: "강의를 찾을 수 없습니다." });
-  const existing = await db.collection("coursePages").findOne({ courseId: courseId });
+  if (!await courseExists(courseId)) return res.status(404).json({ ok: false, message: "강의를 찾을 수 없습니다." });
+  const existing = await db.collection("courses").findOne({ courseId: courseId });
   if (existing && existing.coverKey && r2Ready()) {
     await r2().send(new DeleteObjectCommand({ Bucket: r2Bucket, Key: existing.coverKey }));
   }
   if (existing) {
-    await db.collection("coursePages").updateOne(
+    await db.collection("courses").updateOne(
       { courseId: courseId },
-      { $unset: { coverKey: "", coverType: "", coverSize: "" } }
+      { $unset: { coverKey: "", coverType: "", coverSize: "" }, $set: { updatedAt: new Date() } }
     );
   }
   res.json({ ok: true });

@@ -47,11 +47,10 @@
     }
 
     var pending = window.VodStore.listEnrollments().filter(function (item) { return item.status === "pending"; }).length;
-    var panel = videoPanel();
-    if (tab === "home") panel = dashboardPanel();
+    var panel = dashboardPanel();
     if (tab === "members") panel = membersPanel();
     if (tab === "enroll") panel = enrollPanel();
-    if (tab === "intro") panel = introPanel();
+    if (tab === "courses") panel = coursesPanel();
     root.innerHTML =
       '<header class="page-intro">' +
         '<p class="eyebrow"><span class="dot" aria-hidden="true"></span>ADMIN</p>' +
@@ -64,8 +63,7 @@
         '<button type="button" class="chip" data-tab="home" aria-pressed="' + (tab === "home" ? "true" : "false") + '">대시보드</button>' +
         '<button type="button" class="chip" data-tab="members" aria-pressed="' + (tab === "members" ? "true" : "false") + '">회원</button>' +
         '<button type="button" class="chip" data-tab="enroll" aria-pressed="' + (tab === "enroll" ? "true" : "false") + '">수강 승인' + (pending ? " " + pending : "") + "</button>" +
-        '<button type="button" class="chip" data-tab="intro" aria-pressed="' + (tab === "intro" ? "true" : "false") + '">강의 소개</button>' +
-        '<button type="button" class="chip" data-tab="videos" aria-pressed="' + (tab === "videos" ? "true" : "false") + '">영상 관리</button>' +
+        '<button type="button" class="chip" data-tab="courses" aria-pressed="' + (tab === "courses" ? "true" : "false") + '">강의</button>' +
       "</div>" +
       panel;
   }
@@ -206,15 +204,46 @@
     };
   }
 
-  function introPanel() {
-    return window.VodCatalog.courses.map(function (course) {
+  function coursesPanel() {
+    var adder =
+      '<form class="manage-form" data-add-course>' +
+        "<h3>새 강의</h3>" +
+        '<label class="field">분류<input name="category" required maxlength="20" placeholder="자격증" /></label>' +
+        '<label class="field">강의 제목<input name="title" required maxlength="80" placeholder="강의 제목" /></label>' +
+        '<label class="field">한 줄 소개<input name="summary" required maxlength="300" placeholder="이 강의에서 배우는 내용" /></label>' +
+        '<label class="field">수강 대상<input name="audience" maxlength="200" placeholder="어떤 수강생에게 맞는 강의인지" /></label>' +
+        '<button class="btn primary" type="submit"' + (busy ? " disabled" : "") + ">강의 추가</button>" +
+      "</form>";
+    if (!window.VodCatalog.courses.length) {
+      return adder + '<div class="empty"><strong>등록된 강의가 없습니다</strong><p>강의를 추가한 뒤 소개와 영상을 이어서 올릴 수 있습니다.</p></div>';
+    }
+    return adder + window.VodCatalog.courses.map(function (course) {
       var preview = course.coverUrl
         ? '<img class="cover-preview" src="' + window.VodUI.esc(course.coverUrl) + '" alt="" />'
         : '<div class="thumb tone-' + window.VodUI.esc(course.tone) + ' cover-fallback"><strong>이미지 없음</strong></div>';
       var removeCover = course.coverUrl
         ? '<button type="button" class="btn small" data-remove-cover="' + window.VodUI.esc(course.id) + '"' + (busy ? " disabled" : "") + ">이미지 삭제</button>"
         : "";
-      return '<section class="admin-course"><h2>' + window.VodUI.esc(course.title) + "</h2>" +
+      var lessonBody = (course.chapters || []).map(function (chapter) {
+        var rows = (chapter.lessons || []).map(function (lesson, index) {
+          var meta = window.VodStore.videoMeta(lesson.id);
+          var info = meta
+            ? window.VodUI.esc(meta.name) + " · " + bytes(meta.size) + (meta.seconds ? " · " + window.VodUI.clock(meta.seconds) : "")
+            : "등록된 영상이 없습니다. 승인된 수강생에게는 샘플 영상이 재생됩니다.";
+          var removeVideo = meta ? '<button type="button" class="btn small" data-remove-video="' + window.VodUI.esc(lesson.id) + '">영상 삭제</button>' : "";
+          return '<div class="lesson-admin"><div><strong>' + String(index + 1).padStart(2, "0") + ". " + window.VodUI.esc(lesson.title) + "</strong><p>" + info + "</p></div>" +
+            '<div class="file-line"><input type="file" data-file-for="' + window.VodUI.esc(lesson.id) + '" accept="video/*" />' +
+            '<button type="button" class="btn small primary" data-upload="' + window.VodUI.esc(lesson.id) + '"' + (busy ? " disabled" : "") + ">업로드</button>" +
+            removeVideo +
+            '<button type="button" class="btn small danger" data-remove-lesson="' + window.VodUI.esc(lesson.id) + '">회차 삭제</button></div></div>';
+        }).join("");
+        return '<h3 class="chapter-label">' + window.VodUI.esc(chapter.title) + "</h3>" + (rows || '<p class="fine">이 챕터에 회차가 없습니다.</p>');
+      }).join("");
+      var options = (course.chapters || []).map(function (chapter) {
+        return '<option value="' + window.VodUI.esc(chapter.title) + '"></option>';
+      }).join("");
+      return '<section class="admin-course"><div class="member-head"><h2>' + window.VodUI.esc(course.title) + "</h2>" +
+        '<button type="button" class="btn small danger" data-delete-course="' + window.VodUI.esc(course.id) + '" data-course-name="' + window.VodUI.esc(course.title) + '"' + (busy ? " disabled" : "") + ">강의 삭제</button></div>" +
         '<form class="manage-form" data-course-page="' + window.VodUI.esc(course.id) + '">' +
           "<h3>소개 글</h3>" +
           '<label class="field">분류<input name="category" required maxlength="20" value="' + window.VodUI.esc(course.category) + '" /></label>' +
@@ -230,33 +259,9 @@
           '<div class="file-line"><input type="file" data-cover-for="' + window.VodUI.esc(course.id) + '" accept="image/jpeg,image/png,image/webp" />' +
           '<button type="button" class="btn small primary" data-upload-cover="' + window.VodUI.esc(course.id) + '"' + (busy ? " disabled" : "") + ">이미지 올리기</button>" +
           removeCover + "</div>" +
-          '<p class="fine">JPG, PNG, WEBP · 5MB 이하. 강의 소개 왼쪽에 표시됩니다.</p></div></section>';
-    }).join("");
-  }
-
-  function videoPanel() {
-    return window.VodCatalog.courses.map(function (course) {
-      var chapters = course.chapters.map(function (chapter) {
-        var rows = chapter.lessons.map(function (lesson, index) {
-          var meta = window.VodStore.videoMeta(lesson.id);
-          var info = meta
-            ? window.VodUI.esc(meta.name) + " · " + bytes(meta.size) + (meta.seconds ? " · " + window.VodUI.clock(meta.seconds) : "")
-            : "등록된 영상이 없습니다. 승인된 수강생에게는 샘플 영상이 재생됩니다.";
-          var removeVideo = meta ? '<button type="button" class="btn small" data-remove-video="' + window.VodUI.esc(lesson.id) + '">영상 삭제</button>' : "";
-          var removeLesson = window.VodStore.isCustomLesson(lesson.id)
-            ? '<button type="button" class="btn small danger" data-remove-lesson="' + window.VodUI.esc(lesson.id) + '">회차 삭제</button>'
-            : "";
-          return '<div class="lesson-admin"><div><strong>' + String(index + 1).padStart(2, "0") + ". " + window.VodUI.esc(lesson.title) + "</strong><p>" + info + "</p></div>" +
-            '<div class="file-line"><input type="file" data-file-for="' + window.VodUI.esc(lesson.id) + '" accept="video/*" />' +
-            '<button type="button" class="btn small primary" data-upload="' + window.VodUI.esc(lesson.id) + '"' + (busy ? " disabled" : "") + ">업로드</button>" +
-            removeVideo + removeLesson + "</div></div>";
-        }).join("");
-        return '<h3 class="chapter-label">' + window.VodUI.esc(chapter.title) + "</h3>" + rows;
-      }).join("");
-      var options = course.chapters.map(function (chapter) {
-        return '<option value="' + window.VodUI.esc(chapter.title) + '"></option>';
-      }).join("");
-      return '<section class="admin-course"><h2>' + window.VodUI.esc(course.title) + "</h2>" + chapters +
+          '<p class="fine">JPG, PNG, WEBP · 5MB 이하. 강의 소개 왼쪽에 표시됩니다.</p></div>' +
+        "<h3>회차 영상</h3>" +
+        (lessonBody || '<p class="fine">아직 회차가 없습니다. 아래에서 회차와 영상을 추가하세요.</p>') +
         '<form class="manage-form" data-add-lesson="' + window.VodUI.esc(course.id) + '">' +
           "<h3>회차 추가</h3>" +
           '<label class="field">챕터<input name="chapter" list="chapters-' + window.VodUI.esc(course.id) + '" required maxlength="40" placeholder="기존 챕터 또는 새 챕터 이름" /></label>' +
@@ -374,6 +379,19 @@
       });
       return;
     }
+    var removeCourse = event.target.closest("[data-delete-course]");
+    if (removeCourse) {
+      if (busy) return;
+      var courseName = removeCourse.getAttribute("data-course-name") || "이 강의";
+      if (!window.confirm(courseName + " 강의와 회차, 영상, 수강 신청을 삭제할까요?")) return;
+      busy = true;
+      window.VodStore.deleteCourse(removeCourse.getAttribute("data-delete-course")).then(function (result) {
+        busy = false;
+        setStatus(result.ok ? "강의를 삭제했습니다." : result.message, !result.ok);
+        render();
+      });
+      return;
+    }
     var removeLesson = event.target.closest("[data-remove-lesson]");
     if (removeLesson) {
       if (busy) return;
@@ -430,6 +448,24 @@
       }).then(function (result) {
         busy = false;
         setStatus(result.ok ? "수강을 승인했습니다." : result.message, !result.ok);
+        render();
+      });
+      return;
+    }
+    var addCourse = event.target.closest("[data-add-course]");
+    if (addCourse) {
+      event.preventDefault();
+      if (busy) return;
+      busy = true;
+      setStatus("강의를 추가하는 중입니다.");
+      window.VodStore.createCourse({
+        category: addCourse.category.value,
+        title: addCourse.title.value,
+        summary: addCourse.summary.value,
+        audience: addCourse.audience.value
+      }).then(function (result) {
+        busy = false;
+        setStatus(result.ok ? "강의를 추가했습니다. 소개와 영상을 이어서 올려 주세요." : result.message, !result.ok);
         render();
       });
       return;
