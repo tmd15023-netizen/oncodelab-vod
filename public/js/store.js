@@ -9,6 +9,14 @@
   var videoCache = {};
   var lessonCache = [];
 
+  function normalizeEmail(email) {
+    return String(email || "").trim().toLowerCase();
+  }
+
+  function isEmail(value) {
+    return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value);
+  }
+
   function legacyLessons() {
     try {
       var raw = localStorage.getItem(LEGACY_KEY);

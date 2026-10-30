@@ -168,6 +168,8 @@
           return;
         }
         finishAuth();
+      }).catch(function () {
+        showAuthError("login-error", "로그인하지 못했습니다. 다시 시도해 주세요.");
       });
     });
     document.getElementById("signup-form").addEventListener("submit", function (event) {
@@ -179,6 +181,8 @@
           return;
         }
         finishAuth();
+      }).catch(function () {
+        showAuthError("signup-error", "회원가입하지 못했습니다. 다시 시도해 주세요.");
       });
     });
   }
