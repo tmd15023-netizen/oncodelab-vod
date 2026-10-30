@@ -228,6 +228,32 @@ img { display: block; max-width: 100%; }
 
 .art-card strong { font-size: 20px; line-height: 1.3; }
 
+.art-card.has-photo {
+  min-height: 148px;
+  overflow: hidden;
+}
+
+.art-card.has-photo img {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.art-card.has-photo::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 58%;
+  background: linear-gradient(transparent, rgba(17, 24, 39, 0.62));
+}
+
+.art-card.has-photo span,
+.art-card.has-photo strong { position: relative; z-index: 1; }
+
 .art-card:nth-child(1) { top: 8px; right: 6px; transform: rotate(7deg); }
 .art-card:nth-child(2) { top: 96px; right: 138px; transform: rotate(-8deg); z-index: 2; }
 .art-card:nth-child(3) { bottom: 4px; right: 18px; transform: rotate(4deg); z-index: 3; }

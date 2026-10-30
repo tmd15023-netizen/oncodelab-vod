@@ -5,12 +5,37 @@
   var stats = window.VodStore.summary();
   var student = window.VodStore.getStudent();
 
+  function shuffle(list) {
+    var copy = list.slice();
+    for (var index = copy.length - 1; index > 0; index -= 1) {
+      var swap = Math.floor(Math.random() * (index + 1));
+      var item = copy[index];
+      copy[index] = copy[swap];
+      copy[swap] = item;
+    }
+    return copy;
+  }
+
   function art() {
-    return '<div class="hero-art" aria-hidden="true">' +
-      '<div class="art-card tone-violet"><span>VOD</span><strong>AI-POT 2급</strong></div>' +
-      '<div class="art-card tone-blue"><span>VOD</span><strong>AI-POT 1급</strong></div>' +
-      '<div class="art-card tone-teal"><span>VOD</span><strong>홈페이지 제작</strong></div>' +
-    "</div>";
+    var featured = window.VodCatalog.courses.filter(function (course) { return course.featured; });
+    var photos = shuffle(featured.filter(function (course) { return course.coverUrl; }));
+    var plain = shuffle(featured.filter(function (course) { return !course.coverUrl; }));
+    var picked = shuffle(photos.concat(plain).slice(0, 3));
+    if (!picked.length) {
+      return '<div class="hero-art" aria-hidden="true">' +
+        '<div class="art-card tone-violet"><span>VOD</span><strong>AI-POT 2급</strong></div>' +
+        '<div class="art-card tone-blue"><span>VOD</span><strong>AI-POT 1급</strong></div>' +
+        '<div class="art-card tone-teal"><span>VOD</span><strong>홈페이지 제작</strong></div>' +
+      "</div>";
+    }
+    return '<div class="hero-art" aria-hidden="true">' + picked.map(function (course) {
+      var photo = course.coverUrl
+        ? '<img src="' + window.VodUI.esc(course.coverUrl) + '" alt="" />'
+        : "";
+      return '<div class="art-card' + (photo ? " has-photo" : "") + " tone-" + window.VodUI.esc(course.tone) + '">' +
+        photo +
+        "<span>VOD</span><strong>" + window.VodUI.esc(course.pathLabel || course.title) + "</strong></div>";
+    }).join("") + "</div>";
   }
 
   function statStack() {
