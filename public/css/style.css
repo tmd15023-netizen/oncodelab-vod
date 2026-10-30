@@ -469,6 +469,23 @@ button.course-card {
   box-shadow: 0 0 0 4px rgba(120, 130, 145, 0.55), 0 10px 24px rgba(23, 32, 51, 0.16);
 }
 
+.thumb.has-photo {
+  aspect-ratio: 16 / 9;
+  height: auto;
+  min-height: 0;
+  padding: 0;
+}
+
+.thumb.has-photo .thumb-photo {
+  object-fit: contain;
+  background: #f4f6f9;
+}
+
+.detail-hero .thumb.has-photo {
+  height: auto;
+  min-height: 0;
+}
+
 .thumb.has-photo .thumb-chip {
   position: absolute;
   top: 14px;
@@ -1009,9 +1026,11 @@ button.course-card {
 .cover-box h3 { font-size: 16px; }
 .cover-preview,
 .cover-fallback {
-  width: 180px;
-  height: 240px;
-  object-fit: cover;
+  width: min(100%, 320px);
+  height: auto;
+  aspect-ratio: 16 / 9;
+  object-fit: contain;
+  background: #f4f6f9;
   border-radius: 16px;
 }
 .cover-fallback { display: flex; align-items: flex-end; }
