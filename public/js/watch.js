@@ -72,7 +72,7 @@
     var next = lessons[index + 1];
     var usingSample = !uploaded(lesson) && !external(lesson);
     var stage = allowed
-      ? '<video id="lecture" controls playsinline controlslist="nodownload" preload="metadata" aria-label="' + window.VodUI.esc(lesson.title) + '"></video>'
+      ? '<video id="lecture" controls playsinline controlslist="nodownload noplaybackrate noremoteplayback" disablepictureinpicture disableremoteplayback draggable="false" preload="metadata" aria-label="' + window.VodUI.esc(lesson.title) + '"></video>'
       : lockHTML(access);
     var extra = allowed
       ? '<span class="spacer"></span><label class="rate-label">속도<select id="rate"><option value="0.75">0.75×</option><option value="1" selected>1×</option><option value="1.25">1.25×</option><option value="1.5">1.5×</option><option value="2">2×</option></select></label><button type="button" class="btn" id="complete-btn">이 회차 완료</button>'
@@ -157,6 +157,14 @@
 
   function bindPlayer(usingSample) {
     var video = document.getElementById("lecture");
+    video.controlsList.add("nodownload", "noplaybackrate", "noremoteplayback");
+    video.disablePictureInPicture = true;
+    video.disableRemotePlayback = true;
+    function blockVideoMenu(event) {
+      event.preventDefault();
+    }
+    video.addEventListener("contextmenu", blockVideoMenu);
+    video.addEventListener("dragstart", blockVideoMenu);
     var saved = window.VodStore.getProgress(course.id).positions[lesson.id] || 0;
     var triedRemote = false;
     var samplePlayback = usingSample;

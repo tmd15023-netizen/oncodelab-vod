@@ -122,7 +122,8 @@
   }
 
   function membersPanel() {
-    var users = window.VodStore.listUsers().filter(function (item) { return item.role !== "admin"; });
+    var me = window.VodStore.getStudent();
+    var users = window.VodStore.listUsers();
     if (!users.length) {
       return '<div class="empty"><strong>등록된 회원이 없습니다</strong><p>회원가입한 수강생이 이곳에 나타납니다.</p></div>';
     }
@@ -134,17 +135,29 @@
               (periodText(item) ? " · " + window.VodUI.esc(periodText(item)) : "") + "</li>";
           }).join("")
         : "<li>승인된 강의가 없습니다.</li>";
-      return '<section class="member-card"><div class="member-head"><div><strong>' + window.VodUI.esc(user.name) + "</strong><p>" +
-        window.VodUI.esc(user.email) + " · 가입 " + window.VodUI.esc(window.VodUI.formatWhen(user.createdAt)) + "</p></div>" +
-        '<button type="button" class="btn small danger" data-delete-user="' + window.VodUI.esc(user.id) + '" data-user-name="' + window.VodUI.esc(user.name) + '">회원 삭제</button></div>' +
-        '<ul class="user-list">' + list + "</ul>" +
+      /* 기본 관리자(admin@ncodelab.kr)는 서버가 ADMIN_PASSWORD로 관리하므로 권한을 바꾸지 않습니다. */
+      var self = me && user.id === me.id;
+      var locked = self || user.email === "admin@ncodelab.kr";
+      var roleButton = "";
+      if (!locked && user.role !== "admin") {
+        roleButton = '<button type="button" class="btn small primary" data-role="admin" data-user-id="' + window.VodUI.esc(user.id) + '" data-user-name="' + window.VodUI.esc(user.name) + '">관리자로 전환</button>';
+      } else if (!locked && user.role === "admin") {
+        roleButton = '<button type="button" class="btn small" data-role="student" data-user-id="' + window.VodUI.esc(user.id) + '" data-user-name="' + window.VodUI.esc(user.name) + '">수강생으로 변경</button>';
+      }
+      var deleteButton = user.role === "admin" ? "" : '<button type="button" class="btn small danger" data-delete-user="' + window.VodUI.esc(user.id) + '" data-user-name="' + window.VodUI.esc(user.name) + '">회원 삭제</button>';
+      var roleLabel = user.role === "admin" ? " · 관리자" + (self ? " · 본인" : "") : "";
+      var grant = user.role === "admin" ? "" :
         '<form class="manage-form" data-grant-user="' + window.VodUI.esc(user.id) + '">' +
           "<h3>수강 승인</h3>" +
           '<label class="field">강의<select name="course" required>' + courseOptions() + "</select></label>" +
           '<div class="period-fields"><label class="field">시작일<input name="start" type="date" /></label>' +
           '<label class="field">종료일<input name="end" type="date" /></label></div>' +
           '<button class="btn primary" type="submit">이 강의 승인</button>' +
-        "</form></section>";
+        "</form>";
+      return '<section class="member-card"><div class="member-head"><div><strong>' + window.VodUI.esc(user.name) + "</strong><p>" +
+        window.VodUI.esc(user.email) + roleLabel + " · 가입 " + window.VodUI.esc(window.VodUI.formatWhen(user.createdAt)) + "</p></div>" +
+        '<div class="member-actions">' + roleButton + deleteButton + "</div></div>" +
+        '<ul class="user-list">' + list + "</ul>" + grant + "</section>";
     }).join("");
   }
 
@@ -303,6 +316,23 @@
   });
 
   root.addEventListener("click", function (event) {
+    var roleButton = event.target.closest("[data-role]");
+    if (roleButton) {
+      if (busy) return;
+      var nextRole = roleButton.getAttribute("data-role");
+      var roleName = roleButton.getAttribute("data-user-name") || "이 회원";
+      var ask = nextRole === "admin"
+        ? roleName + " 님을 관리자로 바꿀까요? 관리자는 승인 없이 모든 영상을 볼 수 있습니다."
+        : roleName + " 님을 수강생으로 바꿀까요?";
+      if (!window.confirm(ask)) return;
+      busy = true;
+      window.VodStore.setUserRole(roleButton.getAttribute("data-user-id"), nextRole).then(function (result) {
+        busy = false;
+        setStatus(result.ok ? (nextRole === "admin" ? "관리자로 바꿨습니다." : "수강생으로 바꿨습니다.") : result.message, !result.ok);
+        render();
+      });
+      return;
+    }
     var removeUser = event.target.closest("[data-delete-user]");
     if (!removeUser) return;
     if (busy) return;

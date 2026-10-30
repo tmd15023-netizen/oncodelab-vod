@@ -45,6 +45,7 @@ const uri = process.env.MONGODB_URI;
 const dbName = process.env.MONGODB_DB || "VOD";
 const port = Number(process.env.PORT) || 3000;
 const SESSION_SECONDS = 1209600;
+const ADMIN_EMAIL = "admin@ncodelab.kr";
 
 function missingDatabaseConfig() {
   return !uri || uri.includes("USER:PASSWORD");
@@ -167,28 +168,34 @@ function publicLesson(row) {
 }
 
 /* ADMIN_PASSWORD가 있으면 관리자 비밀번호를 그 값에 맞추고, 바뀌었으면 기존 로그인을 모두 끊습니다. */
+/* 기본 관리자 계정만 다룹니다. 회원 화면에서 관리자로 바꾼 다른 계정의 비밀번호는 건드리지 않습니다. */
 async function ensureAdmin(database) {
   const users = database.collection("users");
-  const admin = await users.findOne({ role: "admin" });
+  const admin = await users.findOne({ email: ADMIN_EMAIL });
   const adminPassword = process.env.ADMIN_PASSWORD;
   if (!adminPassword) {
     if (admin) console.warn("ADMIN_PASSWORD가 없어 관리자 비밀번호를 그대로 둡니다.");
     return;
   }
-  if (admin && await passwordsMatch(adminPassword, admin.passwordSalt, admin.passwordHash)) return;
+  const passwordOk = admin && await passwordsMatch(adminPassword, admin.passwordSalt, admin.passwordHash);
+  if (admin && passwordOk && admin.role === "admin") return;
+  if (admin && passwordOk) {
+    await users.updateOne({ _id: admin._id }, { $set: { role: "admin" } });
+    return;
+  }
   const salt = randomBytes(16).toString("hex");
   const passwordHash = await hashPassword(adminPassword, salt);
   if (admin) {
     await users.updateOne(
       { _id: admin._id },
-      { $set: { passwordSalt: salt, passwordHash: passwordHash, sessionsValidAfter: new Date() } }
+      { $set: { role: "admin", passwordSalt: salt, passwordHash: passwordHash, sessionsValidAfter: new Date() } }
     );
     console.log("관리자 비밀번호를 ADMIN_PASSWORD 값으로 바꿨습니다.");
     return;
   }
   await users.insertOne({
     name: "관리자",
-    email: "admin@ncodelab.kr",
+    email: ADMIN_EMAIL,
     passwordSalt: salt,
     passwordHash: passwordHash,
     role: "admin",
@@ -475,6 +482,7 @@ app.post("/api/register", route(async function (req, res) {
   if (name.length < 2) return res.status(400).json({ ok: false, message: "이름은 두 글자 이상 입력해 주세요." });
   if (name.length > 20) return res.status(400).json({ ok: false, message: "이름은 20자 안으로 입력해 주세요." });
   if (!isEmail(email) || email.length > 120) return res.status(400).json({ ok: false, message: "이메일 형식을 확인해 주세요." });
+  if (email === ADMIN_EMAIL) return res.status(409).json({ ok: false, message: "이미 가입된 이메일입니다." });
   if (password.length < 8) return res.status(400).json({ ok: false, message: "비밀번호는 8자 이상 입력해 주세요." });
   if (password.length > 200) return res.status(400).json({ ok: false, message: "비밀번호는 200자 안으로 입력해 주세요." });
   const salt = randomBytes(16).toString("hex");
@@ -599,6 +607,20 @@ app.post("/api/admin/enrollments", route(async function (req, res) {
     },
     { upsert: true }
   );
+  res.json({ ok: true });
+}));
+
+app.patch("/api/users/:id", route(async function (req, res) {
+  const admin = await requireAdminUser(req, res, "관리자만 회원 권한을 바꿀 수 있습니다.");
+  if (!admin) return;
+  if (!ObjectId.isValid(req.params.id)) return res.status(404).json({ ok: false, message: "회원을 찾을 수 없습니다." });
+  const role = req.body && req.body.role;
+  if (role !== "admin" && role !== "student") return res.status(400).json({ ok: false, message: "바꿀 수 없는 권한입니다." });
+  if (String(admin._id) === req.params.id) return res.status(400).json({ ok: false, message: "로그인한 계정의 권한은 바꿀 수 없습니다." });
+  const target = await db.collection("users").findOne({ _id: new ObjectId(req.params.id) });
+  if (!target) return res.status(404).json({ ok: false, message: "회원을 찾을 수 없습니다." });
+  if (target.email === ADMIN_EMAIL) return res.status(400).json({ ok: false, message: "기본 관리자 계정의 권한은 바꿀 수 없습니다." });
+  await db.collection("users").updateOne({ _id: target._id }, { $set: { role: role } });
   res.json({ ok: true });
 }));
 

@@ -389,6 +389,15 @@
     });
   }
 
+  function setUserRole(userId, role) {
+    if (!requireAdmin()) return Promise.resolve({ ok: false, message: "관리자만 회원 권한을 바꿀 수 있습니다." });
+    if (role !== "admin" && role !== "student") return Promise.resolve({ ok: false, message: "바꿀 수 없는 권한입니다." });
+    return api("/api/users/" + encodeURIComponent(userId), { method: "PATCH", body: { role: role } }).then(function (data) {
+      if (!data.ok) return data;
+      return refresh().then(function () { return { ok: true }; });
+    });
+  }
+
   function deleteUser(userId) {
     if (!requireAdmin()) return Promise.resolve({ ok: false, message: "관리자만 회원을 삭제할 수 있습니다." });
     return api("/api/users/" + encodeURIComponent(userId), { method: "DELETE" }).then(function (data) {
@@ -566,6 +575,7 @@
     listEnrollments: listEnrollments,
     setEnrollment: setEnrollment,
     grantEnrollment: grantEnrollment,
+    setUserRole: setUserRole,
     deleteUser: deleteUser,
     listUsers: listUsers,
     videoMeta: videoMeta,

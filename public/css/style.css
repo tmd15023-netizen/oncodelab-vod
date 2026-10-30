@@ -663,6 +663,8 @@ img { display: block; max-width: 100%; }
   height: 100%;
   object-fit: contain;
   background: #000;
+  -webkit-touch-callout: none;
+  -webkit-user-drag: none;
 }
 
 .lock {
@@ -945,7 +947,9 @@ img { display: block; max-width: 100%; }
 .dash-card span { color: var(--muted); font-size: 13px; font-weight: 700; }
 
 .member-card { margin-top: 14px; }
-.member-head { display: flex; justify-content: space-between; gap: 12px; align-items: center; }
+.member-head,
+.member-actions { display: flex; justify-content: space-between; gap: 8px; align-items: center; flex-wrap: wrap; }
+.member-actions { justify-content: flex-end; }
 .member-head p,
 .period-fields { color: var(--muted); }
 .period-fields { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 8px; }
@@ -1056,8 +1060,8 @@ img { display: block; max-width: 100%; }
   .catalog-grid,
   .lesson-row { grid-template-columns: 1fr; }
   .lesson-row .time { display: none; }
-  .progress-row,
   .dash-grid { grid-template-columns: 1fr 1fr; }
+  .progress-row,
   .enroll-row { grid-template-columns: 1fr; }
   .enroll-row { display: grid; }
   .stat-row { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); }
