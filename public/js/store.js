@@ -8,6 +8,7 @@
   var userCache = [];
   var videoCache = {};
   var lessonCache = [];
+  var coursePageCache = {};
 
   function normalizeEmail(email) {
     return String(email || "").trim().toLowerCase();
@@ -68,6 +69,16 @@
       });
     });
     courses.forEach(function (course) {
+      var page = coursePageCache[course.id];
+      if (page) {
+        if (page.title) course.title = page.title;
+        if (page.summary) course.summary = page.summary;
+        if (page.audience) course.audience = page.audience;
+        if (page.category) course.category = page.category;
+        if (page.goals && page.goals.length) course.goals = page.goals.slice();
+        if (page.thumbLines && page.thumbLines.length) course.thumbLines = page.thumbLines.slice();
+        course.coverUrl = page.coverUrl || "";
+      }
       course.chapters.forEach(function (chapter) {
         chapter.lessons.forEach(function (lesson) {
           var meta = videoCache[lesson.id];
@@ -105,6 +116,10 @@
     userCache = data && data.users ? data.users : [];
     videoCache = {};
     lessonCache = data && data.lessons ? data.lessons : [];
+    coursePageCache = {};
+    (data && data.courses ? data.courses : []).forEach(function (row) {
+      coursePageCache[row.id] = row;
+    });
     (data && data.videos ? data.videos : []).forEach(function (row) {
       videoCache[row.lessonId] = row;
     });
@@ -536,6 +551,71 @@
     });
   }
 
+  function saveCoursePage(courseId, input) {
+    if (!requireAdmin()) return Promise.resolve({ ok: false, message: "관리자만 강의 소개를 수정할 수 있습니다." });
+    return api("/api/courses/" + encodeURIComponent(courseId), {
+      method: "PATCH",
+      body: {
+        title: input.title,
+        summary: input.summary,
+        audience: input.audience,
+        category: input.category,
+        goals: input.goals,
+        thumbLines: input.thumbLines
+      }
+    }).then(function (result) {
+      if (!result.ok) return result;
+      return refresh().then(function () {
+        applyLibrary();
+        return { ok: true };
+      });
+    });
+  }
+
+  function saveCourseCover(courseId, file) {
+    if (!requireAdmin()) return Promise.resolve({ ok: false, message: "관리자만 이미지를 올릴 수 있습니다." });
+    if (!file) return Promise.resolve({ ok: false, message: "이미지 파일을 선택해 주세요." });
+    var contentType = file.type === "image/jpeg" || file.type === "image/png" || file.type === "image/webp" ? file.type : "";
+    if (!contentType) return Promise.resolve({ ok: false, message: "JPG, PNG, WEBP 이미지만 올릴 수 있습니다." });
+    if (!file.size || file.size > 5 * 1024 * 1024) return Promise.resolve({ ok: false, message: "이미지는 5MB 이하로 올려 주세요." });
+    return api("/api/courses/" + encodeURIComponent(courseId) + "/cover/upload", {
+      method: "POST",
+      body: { contentType: contentType, size: file.size }
+    }).then(function (ticket) {
+      if (!ticket.ok) return ticket;
+      return fetch(ticket.uploadUrl, {
+        method: "PUT",
+        headers: { "Content-Type": ticket.contentType || contentType },
+        body: file
+      }).then(function (response) {
+        if (!response.ok) return { ok: false, message: "이미지 저장소에 올리지 못했습니다." };
+        return api("/api/courses/" + encodeURIComponent(courseId) + "/cover/complete", {
+          method: "POST",
+          body: { key: ticket.key, contentType: ticket.contentType || contentType, size: file.size }
+        });
+      });
+    }).then(function (result) {
+      if (!result.ok) return result;
+      return refresh().then(function () {
+        applyLibrary();
+        return { ok: true };
+      });
+    }).catch(function () {
+      return { ok: false, message: "이미지를 저장하지 못했습니다." };
+    });
+  }
+
+  function removeCourseCover(courseId) {
+    if (!requireAdmin()) return Promise.resolve({ ok: false, message: "관리자만 이미지를 지울 수 있습니다." });
+    return api("/api/courses/" + encodeURIComponent(courseId) + "/cover", { method: "DELETE" }).then(function (result) {
+      if (!result.ok) return result;
+      return refresh().then(function () {
+        applyLibrary();
+        return { ok: true };
+      });
+    });
+  }
+
   function removeLesson(lessonId) {
     if (!requireAdmin()) return Promise.resolve({ ok: false, message: "관리자만 회차를 삭제할 수 있습니다." });
     return api("/api/lessons/" + encodeURIComponent(lessonId), { method: "DELETE" }).then(function (result) {
@@ -584,6 +664,9 @@
     saveVideo: saveVideo,
     removeVideo: removeVideo,
     addLesson: addLesson,
-    removeLesson: removeLesson
+    removeLesson: removeLesson,
+    saveCoursePage: saveCoursePage,
+    saveCourseCover: saveCourseCover,
+    removeCourseCover: removeCourseCover
   };
 })();

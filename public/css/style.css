@@ -387,7 +387,22 @@ img { display: block; max-width: 100%; }
 
 .thumb::before { width: 90px; height: 90px; left: -24px; bottom: -28px; }
 .thumb::after { width: 140px; height: 140px; right: -36px; top: -48px; }
-.thumb > * { position: relative; z-index: 1; }
+.thumb > *:not(.thumb-photo) { position: relative; z-index: 1; }
+
+.thumb-photo {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.thumb.has-photo .thumb-chip {
+  position: absolute;
+  top: 14px;
+  left: 14px;
+}
 
 .thumb-chip {
   align-self: flex-start;
@@ -782,6 +797,11 @@ img { display: block; max-width: 100%; }
   border-radius: 12px;
 }
 
+.mini-thumb.has-photo {
+  background-position: center;
+  background-size: cover;
+}
+
 .progress-copy { color: inherit; text-decoration: none; }
 .progress-copy p { margin: 2px 0 8px; color: var(--muted); font-size: 13px; }
 
@@ -888,14 +908,36 @@ img { display: block; max-width: 100%; }
 }
 
 .field input,
-.field select {
-  height: 44px;
+.field select,
+.field textarea {
+  width: 100%;
   padding: 0 12px;
   border: 1px solid var(--line);
   border-radius: 12px;
+  font: inherit;
   font-weight: 500;
   background: #fff;
 }
+
+.field input,
+.field select { height: 44px; }
+
+.field textarea {
+  height: auto;
+  padding: 10px 12px;
+  resize: vertical;
+}
+
+.cover-box { display: grid; gap: 10px; margin-top: 18px; }
+.cover-box h3 { font-size: 16px; }
+.cover-preview,
+.cover-fallback {
+  width: 180px;
+  height: 240px;
+  object-fit: cover;
+  border-radius: 16px;
+}
+.cover-fallback { display: flex; align-items: flex-end; }
 
 .form-error { margin-top: 8px; color: #d12b4a; font-size: 13px; font-weight: 700; }
 .hint { margin-top: 10px; text-align: center; }

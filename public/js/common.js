@@ -51,19 +51,27 @@
     return "watch.html?course=" + encodeURIComponent(courseId) + "&lesson=" + encodeURIComponent(lessonId);
   }
 
-  function courseCard(course) {
-    var state = window.VodStore.courseState(course);
-    var title = course.thumbLines.map(function (line) {
+  function thumbBlock(course, chip) {
+    var lines = (course.thumbLines || []).map(function (line) {
       return "<span>" + esc(line) + "</span>";
     }).join("");
+    var photo = course.coverUrl
+      ? '<img class="thumb-photo" src="' + esc(course.coverUrl) + '" alt="' + esc(course.title) + '" />'
+      : "";
+    return '<div class="thumb' + (photo ? " has-photo" : "") + " tone-" + esc(course.tone) + '">' +
+      photo +
+      '<span class="thumb-chip">' + chip + "</span>" +
+      (photo ? "" : "<strong>" + lines + "</strong>") +
+    "</div>";
+  }
+
+  function courseCard(course) {
+    var state = window.VodStore.courseState(course);
     var bar = state.percent > 0
       ? '<div class="bar" aria-hidden="true"><span style="width:' + state.percent + '%"></span></div><p class="pct">진도 ' + state.percent + "%</p>"
       : "";
     return '<a class="course-card" href="course.html?id=' + encodeURIComponent(course.id) + '">' +
-      '<div class="thumb tone-' + esc(course.tone) + '">' +
-        '<span class="thumb-chip">VOD · ' + esc(course.category) + "</span>" +
-        "<strong>" + title + "</strong>" +
-      "</div>" +
+      thumbBlock(course, "VOD · " + esc(course.category)) +
       '<h3 class="card-title">' + esc(course.title) + "</h3>" +
       '<p class="card-desc">' + esc(course.summary) + "</p>" +
       '<p class="card-meta">' + state.total + "강 · " + esc(koTime(window.VodCatalog.durationOf(course))) + "</p>" +
@@ -253,6 +261,7 @@
     formatWhen: formatWhen,
     watchHref: watchHref,
     courseCard: courseCard,
+    thumbBlock: thumbBlock,
     mountAccount: mountAccount,
     openGate: openGate
   };

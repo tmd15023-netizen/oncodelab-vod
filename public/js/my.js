@@ -72,7 +72,7 @@
     var href = rowHref(item.course, item.point);
     var watchable = window.VodStore.canWatch(item.course.id);
     return '<article class="progress-row">' +
-      '<a class="mini-thumb tone-' + window.VodUI.esc(item.course.tone) + '" href="course.html?id=' + encodeURIComponent(item.course.id) + '" aria-label="' + window.VodUI.esc(item.course.title) + '"></a>' +
+      '<a class="mini-thumb' + (item.course.coverUrl ? " has-photo" : "") + " tone-" + window.VodUI.esc(item.course.tone) + '" href="course.html?id=' + encodeURIComponent(item.course.id) + '" aria-label="' + window.VodUI.esc(item.course.title) + '"' + (item.course.coverUrl ? ' style="background-image:url(\'' + window.VodUI.esc(item.course.coverUrl) + '\')"' : "") + "></a>" +
       '<a class="progress-copy" href="course.html?id=' + encodeURIComponent(item.course.id) + '">' +
         "<strong>" + window.VodUI.esc(item.course.title) + "</strong>" +
         "<p>" + item.state.done + " / " + item.state.total + "강 완료 · " + statusText(item.course) + "</p>" +

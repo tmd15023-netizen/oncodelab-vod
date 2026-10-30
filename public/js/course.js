@@ -23,12 +23,10 @@
   }
 
   function render() {
+    course = window.VodCatalog.byId(course.id) || course;
     var state = window.VodStore.courseState(course);
     var point = window.VodStore.resumePoint(course);
     var access = window.VodStore.accessState(course.id);
-    var lines = course.thumbLines.map(function (line) {
-      return "<span>" + window.VodUI.esc(line) + "</span>";
-    }).join("");
     var goals = course.goals.map(function (goal) {
       return "<li>" + window.VodUI.esc(goal) + "</li>";
     }).join("");
@@ -64,7 +62,7 @@
     root.innerHTML =
       '<p class="crumb"><a href="courses.html">전체 강의</a> · ' + window.VodUI.esc(course.category) + "</p>" +
       '<section class="detail-hero">' +
-        '<div class="thumb tone-' + window.VodUI.esc(course.tone) + '"><span class="thumb-chip">VOD</span><strong>' + lines + "</strong></div>" +
+        window.VodUI.thumbBlock(course, "VOD") +
         '<div class="detail-copy">' +
           '<p class="eyebrow"><span class="dot" aria-hidden="true"></span>' + window.VodUI.esc(course.category) + "</p>" +
           "<h1>" + window.VodUI.esc(course.title) + "</h1>" +

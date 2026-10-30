@@ -15,6 +15,10 @@
     return (value / (1024 * 1024)).toFixed(1) + "MB";
   }
 
+  function isImage(file) {
+    return !!(file && (file.type === "image/jpeg" || file.type === "image/png" || file.type === "image/webp"));
+  }
+
   function isVideo(file) {
     if (!file) return false;
     if (file.type && file.type.indexOf("video/") === 0) return true;
@@ -47,6 +51,7 @@
     if (tab === "home") panel = dashboardPanel();
     if (tab === "members") panel = membersPanel();
     if (tab === "enroll") panel = enrollPanel();
+    if (tab === "intro") panel = introPanel();
     root.innerHTML =
       '<header class="page-intro">' +
         '<p class="eyebrow"><span class="dot" aria-hidden="true"></span>ADMIN</p>' +
@@ -59,6 +64,7 @@
         '<button type="button" class="chip" data-tab="home" aria-pressed="' + (tab === "home" ? "true" : "false") + '">대시보드</button>' +
         '<button type="button" class="chip" data-tab="members" aria-pressed="' + (tab === "members" ? "true" : "false") + '">회원</button>' +
         '<button type="button" class="chip" data-tab="enroll" aria-pressed="' + (tab === "enroll" ? "true" : "false") + '">수강 승인' + (pending ? " " + pending : "") + "</button>" +
+        '<button type="button" class="chip" data-tab="intro" aria-pressed="' + (tab === "intro" ? "true" : "false") + '">강의 소개</button>' +
         '<button type="button" class="chip" data-tab="videos" aria-pressed="' + (tab === "videos" ? "true" : "false") + '">영상 관리</button>' +
       "</div>" +
       panel;
@@ -200,6 +206,34 @@
     };
   }
 
+  function introPanel() {
+    return window.VodCatalog.courses.map(function (course) {
+      var preview = course.coverUrl
+        ? '<img class="cover-preview" src="' + window.VodUI.esc(course.coverUrl) + '" alt="" />'
+        : '<div class="thumb tone-' + window.VodUI.esc(course.tone) + ' cover-fallback"><strong>이미지 없음</strong></div>';
+      var removeCover = course.coverUrl
+        ? '<button type="button" class="btn small" data-remove-cover="' + window.VodUI.esc(course.id) + '"' + (busy ? " disabled" : "") + ">이미지 삭제</button>"
+        : "";
+      return '<section class="admin-course"><h2>' + window.VodUI.esc(course.title) + "</h2>" +
+        '<form class="manage-form" data-course-page="' + window.VodUI.esc(course.id) + '">' +
+          "<h3>소개 글</h3>" +
+          '<label class="field">분류<input name="category" required maxlength="20" value="' + window.VodUI.esc(course.category) + '" /></label>' +
+          '<label class="field">강의 제목<input name="title" required maxlength="80" value="' + window.VodUI.esc(course.title) + '" /></label>' +
+          '<label class="field">한 줄 소개<input name="summary" required maxlength="300" value="' + window.VodUI.esc(course.summary) + '" /></label>' +
+          '<label class="field">수강 대상<input name="audience" required maxlength="200" value="' + window.VodUI.esc(course.audience) + '" /></label>' +
+          '<label class="field">학습 목표<textarea name="goals" rows="4" required maxlength="1000">' + window.VodUI.esc((course.goals || []).join("\n")) + "</textarea></label>" +
+          '<p class="fine">학습 목표는 한 줄에 하나씩 입력합니다.</p>' +
+          '<label class="field">이미지 없을 때 카드 문구<textarea name="thumbLines" rows="2" required maxlength="80">' + window.VodUI.esc((course.thumbLines || []).join("\n")) + "</textarea></label>" +
+          '<button class="btn primary" type="submit"' + (busy ? " disabled" : "") + ">소개 저장</button>" +
+        "</form>" +
+        '<div class="cover-box"><h3>자격증 이미지</h3>' + preview +
+          '<div class="file-line"><input type="file" data-cover-for="' + window.VodUI.esc(course.id) + '" accept="image/jpeg,image/png,image/webp" />' +
+          '<button type="button" class="btn small primary" data-upload-cover="' + window.VodUI.esc(course.id) + '"' + (busy ? " disabled" : "") + ">이미지 올리기</button>" +
+          removeCover + "</div>" +
+          '<p class="fine">JPG, PNG, WEBP · 5MB 이하. 강의 소개 왼쪽에 표시됩니다.</p></div></section>';
+    }).join("");
+  }
+
   function videoPanel() {
     return window.VodCatalog.courses.map(function (course) {
       var chapters = course.chapters.map(function (chapter) {
@@ -302,6 +336,44 @@
       });
       return;
     }
+    var uploadCover = event.target.closest("[data-upload-cover]");
+    if (uploadCover) {
+      if (busy) return;
+      var courseId = uploadCover.getAttribute("data-upload-cover");
+      var coverInput = root.querySelector('[data-cover-for="' + courseId + '"]');
+      var coverFile = coverInput && coverInput.files && coverInput.files[0];
+      if (!coverFile) {
+        setStatus("올릴 이미지를 선택해 주세요.", true);
+        render();
+        return;
+      }
+      if (!isImage(coverFile)) {
+        setStatus("JPG, PNG, WEBP 이미지만 올릴 수 있습니다.", true);
+        render();
+        return;
+      }
+      busy = true;
+      setStatus("이미지를 저장하는 중입니다.");
+      render();
+      window.VodStore.saveCourseCover(courseId, coverFile).then(function (result) {
+        busy = false;
+        setStatus(result.ok ? "자격증 이미지를 저장했습니다." : result.message, !result.ok);
+        render();
+      });
+      return;
+    }
+    var removeCover = event.target.closest("[data-remove-cover]");
+    if (removeCover) {
+      if (busy) return;
+      if (!window.confirm("이 강의의 자격증 이미지를 삭제할까요?")) return;
+      busy = true;
+      window.VodStore.removeCourseCover(removeCover.getAttribute("data-remove-cover")).then(function (result) {
+        busy = false;
+        setStatus(result.ok ? "자격증 이미지를 삭제했습니다." : result.message, !result.ok);
+        render();
+      });
+      return;
+    }
     var removeLesson = event.target.closest("[data-remove-lesson]");
     if (removeLesson) {
       if (busy) return;
@@ -358,6 +430,26 @@
       }).then(function (result) {
         busy = false;
         setStatus(result.ok ? "수강을 승인했습니다." : result.message, !result.ok);
+        render();
+      });
+      return;
+    }
+    var pageForm = event.target.closest("[data-course-page]");
+    if (pageForm) {
+      event.preventDefault();
+      if (busy) return;
+      busy = true;
+      setStatus("강의 소개를 저장하는 중입니다.");
+      window.VodStore.saveCoursePage(pageForm.getAttribute("data-course-page"), {
+        category: pageForm.category.value,
+        title: pageForm.title.value,
+        summary: pageForm.summary.value,
+        audience: pageForm.audience.value,
+        goals: pageForm.goals.value,
+        thumbLines: pageForm.thumbLines.value
+      }).then(function (result) {
+        busy = false;
+        setStatus(result.ok ? "강의 소개를 저장했습니다." : result.message, !result.ok);
         render();
       });
       return;

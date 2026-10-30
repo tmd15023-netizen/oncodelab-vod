@@ -97,6 +97,7 @@ async function ensureIndexes(database) {
   );
   await database.collection("videos").createIndex({ lessonId: 1 }, { unique: true });
   await database.collection("lessons").createIndex({ lessonId: 1 }, { unique: true });
+  await database.collection("coursePages").createIndex({ courseId: 1 }, { unique: true });
 }
 
 const baseLessonCourse = {};
@@ -154,6 +155,49 @@ function publicVideo(row, isAdmin) {
   video.type = row.contentType || "";
   video.updatedAt = row.updatedAt ? new Date(row.updatedAt).getTime() : 0;
   return video;
+}
+
+function clipText(value, max) {
+  return String(value || "").trim().replace(/\s+/g, " ").slice(0, max);
+}
+
+function clipLines(value, count, max) {
+  const source = Array.isArray(value) ? value : String(value || "").split(/\r?\n/);
+  const lines = [];
+  source.forEach(function (item) {
+    const line = clipText(item, max);
+    if (line && lines.length < count) lines.push(line);
+  });
+  return lines;
+}
+
+const COVER_EXT = { "image/jpeg": "jpg", "image/png": "png", "image/webp": "webp" };
+const COVER_BYTES = 5 * 1024 * 1024;
+
+async function coursePages() {
+  const rows = await db.collection("coursePages").find({}).toArray();
+  const pages = [];
+  for (const row of rows) {
+    if (!courseExists(row.courseId)) continue;
+    let coverUrl = "";
+    if (row.coverKey && r2Ready()) {
+      coverUrl = await getSignedUrl(r2(), new GetObjectCommand({
+        Bucket: r2Bucket,
+        Key: row.coverKey
+      }), { expiresIn: 60 * 60 * 4 });
+    }
+    pages.push({
+      id: row.courseId,
+      title: row.title || "",
+      summary: row.summary || "",
+      audience: row.audience || "",
+      category: row.category || "",
+      goals: Array.isArray(row.goals) ? row.goals : [],
+      thumbLines: Array.isArray(row.thumbLines) ? row.thumbLines : [],
+      coverUrl: coverUrl
+    });
+  }
+  return pages;
 }
 
 function publicLesson(row) {
@@ -447,6 +491,7 @@ app.get("/api/session", route(async function (req, res) {
   const isAdmin = !!(user && user.role === "admin");
   const lessons = await db.collection("lessons").find({}).sort({ createdAt: 1 }).toArray();
   const videos = await db.collection("videos").find({}, { projection: { key: 0 } }).toArray();
+  const pages = await coursePages();
   if (!user) {
     res.json({
       ok: true,
@@ -455,7 +500,8 @@ app.get("/api/session", route(async function (req, res) {
       progress: [],
       users: [],
       lessons: lessons.map(publicLesson),
-      videos: videos.map(function (row) { return publicVideo(row, false); })
+      videos: videos.map(function (row) { return publicVideo(row, false); }),
+      courses: pages
     });
     return;
   }
@@ -471,7 +517,8 @@ app.get("/api/session", route(async function (req, res) {
     progress: progress.map(publicProgress),
     lessons: lessons.map(publicLesson),
     videos: videos.map(function (row) { return publicVideo(row, isAdmin); }),
-    users: users
+    users: users,
+    courses: pages
   });
 }));
 
@@ -794,6 +841,109 @@ app.delete("/api/videos/:lessonId", route(async function (req, res) {
   const lessonId = String(req.params.lessonId || "");
   if (!isId(lessonId)) return res.status(404).json({ ok: false, message: "회차를 찾을 수 없습니다." });
   await deleteVideo(lessonId);
+  res.json({ ok: true });
+}));
+
+app.patch("/api/courses/:id", route(async function (req, res) {
+  if (!await requireAdminUser(req, res, "관리자만 강의 소개를 수정할 수 있습니다.")) return;
+  const courseId = String(req.params.id || "");
+  if (!courseExists(courseId)) return res.status(404).json({ ok: false, message: "강의를 찾을 수 없습니다." });
+  const body = req.body || {};
+  const title = clipText(body.title, 80);
+  const summary = clipText(body.summary, 300);
+  const audience = clipText(body.audience, 200);
+  const category = clipText(body.category, 20);
+  const goals = clipLines(body.goals, 8, 120);
+  const thumbLines = clipLines(body.thumbLines, 3, 24);
+  if (title.length < 2) return res.status(400).json({ ok: false, message: "강의 제목은 두 글자 이상 입력해 주세요." });
+  if (!summary) return res.status(400).json({ ok: false, message: "강의 소개를 입력해 주세요." });
+  if (!audience) return res.status(400).json({ ok: false, message: "수강 대상을 입력해 주세요." });
+  if (!category) return res.status(400).json({ ok: false, message: "분류를 입력해 주세요." });
+  if (!goals.length) return res.status(400).json({ ok: false, message: "학습 목표를 한 줄 이상 입력해 주세요." });
+  if (!thumbLines.length) return res.status(400).json({ ok: false, message: "이미지 없을 때 표시할 문구를 입력해 주세요." });
+  await db.collection("coursePages").updateOne(
+    { courseId: courseId },
+    {
+      $set: {
+        courseId: courseId,
+        title: title,
+        summary: summary,
+        audience: audience,
+        category: category,
+        goals: goals,
+        thumbLines: thumbLines,
+        updatedAt: new Date()
+      }
+    },
+    { upsert: true }
+  );
+  res.json({ ok: true });
+}));
+
+app.post("/api/courses/:id/cover/upload", route(async function (req, res) {
+  if (!await requireAdminUser(req, res, "관리자만 이미지를 올릴 수 있습니다.")) return;
+  if (!r2Ready()) return res.status(503).json({ ok: false, message: "이미지 저장소 연결 정보가 없습니다. .env의 R2 값을 확인해 주세요." });
+  const courseId = String(req.params.id || "");
+  if (!courseExists(courseId)) return res.status(404).json({ ok: false, message: "강의를 찾을 수 없습니다." });
+  const contentType = String((req.body && req.body.contentType) || "");
+  const ext = COVER_EXT[contentType];
+  const size = Number(req.body && req.body.size) || 0;
+  if (!ext) return res.status(400).json({ ok: false, message: "JPG, PNG, WEBP 이미지만 올릴 수 있습니다." });
+  if (size <= 0 || size > COVER_BYTES) return res.status(400).json({ ok: false, message: "이미지는 5MB 이하로 올려 주세요." });
+  const key = "covers/" + courseId + "." + ext;
+  const uploadUrl = await getSignedUrl(r2(), new PutObjectCommand({
+    Bucket: r2Bucket,
+    Key: key,
+    ContentType: contentType
+  }), { expiresIn: 60 * 10 });
+  res.json({ ok: true, uploadUrl: uploadUrl, key: key, contentType: contentType });
+}));
+
+app.post("/api/courses/:id/cover/complete", route(async function (req, res) {
+  if (!await requireAdminUser(req, res, "관리자만 이미지를 올릴 수 있습니다.")) return;
+  const courseId = String(req.params.id || "");
+  if (!courseExists(courseId)) return res.status(404).json({ ok: false, message: "강의를 찾을 수 없습니다." });
+  const body = req.body || {};
+  const contentType = String(body.contentType || "");
+  const ext = COVER_EXT[contentType];
+  const key = String(body.key || "");
+  const size = Number(body.size) || 0;
+  if (!ext || key !== "covers/" + courseId + "." + ext) return res.status(400).json({ ok: false, message: "이미지 위치가 올바르지 않습니다." });
+  if (size <= 0 || size > COVER_BYTES) return res.status(400).json({ ok: false, message: "이미지는 5MB 이하로 올려 주세요." });
+  const existing = await db.collection("coursePages").findOne({ courseId: courseId });
+  await db.collection("coursePages").updateOne(
+    { courseId: courseId },
+    {
+      $set: {
+        courseId: courseId,
+        coverKey: key,
+        coverType: contentType,
+        coverSize: size,
+        updatedAt: new Date()
+      }
+    },
+    { upsert: true }
+  );
+  if (existing && existing.coverKey && existing.coverKey !== key && r2Ready()) {
+    await r2().send(new DeleteObjectCommand({ Bucket: r2Bucket, Key: existing.coverKey }));
+  }
+  res.json({ ok: true });
+}));
+
+app.delete("/api/courses/:id/cover", route(async function (req, res) {
+  if (!await requireAdminUser(req, res, "관리자만 이미지를 지울 수 있습니다.")) return;
+  const courseId = String(req.params.id || "");
+  if (!courseExists(courseId)) return res.status(404).json({ ok: false, message: "강의를 찾을 수 없습니다." });
+  const existing = await db.collection("coursePages").findOne({ courseId: courseId });
+  if (existing && existing.coverKey && r2Ready()) {
+    await r2().send(new DeleteObjectCommand({ Bucket: r2Bucket, Key: existing.coverKey }));
+  }
+  if (existing) {
+    await db.collection("coursePages").updateOne(
+      { courseId: courseId },
+      { $unset: { coverKey: "", coverType: "", coverSize: "" } }
+    );
+  }
   res.json({ ok: true });
 }));
 
