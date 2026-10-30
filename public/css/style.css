@@ -977,6 +977,8 @@ button.course-card {
   border-radius: 16px;
 }
 .cover-fallback { display: flex; align-items: flex-end; }
+.cover-status { margin: 0; color: var(--blue-deep); font-weight: 800; }
+.cover-status.is-error { color: #d12b4a; }
 
 .form-error { margin-top: 8px; color: #d12b4a; font-size: 13px; font-weight: 700; }
 .hint { margin-top: 10px; text-align: center; }

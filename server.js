@@ -1131,6 +1131,34 @@ app.delete("/api/courses/:id", route(async function (req, res) {
   res.json({ ok: true });
 }));
 
+app.post("/api/courses/:id/cover", express.raw({ type: ["image/jpeg", "image/png", "image/webp"], limit: COVER_BYTES }), route(async function (req, res) {
+  if (!await requireAdminUser(req, res, "관리자만 이미지를 올릴 수 있습니다.")) return;
+  if (!r2Ready()) return res.status(503).json({ ok: false, message: "이미지 저장소 연결 정보가 없습니다. .env의 R2 값을 확인해 주세요." });
+  const courseId = String(req.params.id || "");
+  if (!await courseExists(courseId)) return res.status(404).json({ ok: false, message: "강의를 찾을 수 없습니다." });
+  const contentType = String(req.headers["content-type"] || "").split(";")[0].trim().toLowerCase();
+  const ext = COVER_EXT[contentType];
+  const body = Buffer.isBuffer(req.body) ? req.body : Buffer.alloc(0);
+  if (!ext) return res.status(400).json({ ok: false, message: "JPG, PNG, WEBP 이미지만 올릴 수 있습니다." });
+  if (!body.length || body.length > COVER_BYTES) return res.status(400).json({ ok: false, message: "이미지는 5MB 이하로 올려 주세요." });
+  const key = "covers/" + courseId + "." + ext;
+  await r2().send(new PutObjectCommand({
+    Bucket: r2Bucket,
+    Key: key,
+    Body: body,
+    ContentType: contentType
+  }));
+  const existing = await db.collection("courses").findOne({ courseId: courseId });
+  await db.collection("courses").updateOne(
+    { courseId: courseId },
+    { $set: { coverKey: key, coverType: contentType, coverSize: body.length, updatedAt: new Date() } }
+  );
+  if (existing && existing.coverKey && existing.coverKey !== key) {
+    await r2().send(new DeleteObjectCommand({ Bucket: r2Bucket, Key: existing.coverKey }));
+  }
+  res.json({ ok: true });
+}));
+
 app.post("/api/courses/:id/cover/upload", route(async function (req, res) {
   if (!await requireAdminUser(req, res, "관리자만 이미지를 올릴 수 있습니다.")) return;
   if (!r2Ready()) return res.status(503).json({ ok: false, message: "이미지 저장소 연결 정보가 없습니다. .env의 R2 값을 확인해 주세요." });
@@ -1197,7 +1225,9 @@ app.use(function (error, req, res, next) {
   if (status === 500) console.error(error);
   res.status(status).json({
     ok: false,
-    message: status === 500 ? "서버에서 요청을 처리하지 못했습니다." : "요청 형식이 올바르지 않습니다."
+    message: error && error.type === "entity.too.large"
+      ? "이미지는 5MB 이하로 올려 주세요."
+      : status === 500 ? "서버에서 요청을 처리하지 못했습니다." : "요청 형식이 올바르지 않습니다."
   });
 });
 

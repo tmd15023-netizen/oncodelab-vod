@@ -618,27 +618,30 @@
     });
   }
 
+  function imageType(file) {
+    if (!file) return "";
+    if (file.type === "image/jpeg" || file.type === "image/png" || file.type === "image/webp") return file.type;
+    var name = String(file.name || "");
+    if (/\.jpe?g$/i.test(name)) return "image/jpeg";
+    if (/\.png$/i.test(name)) return "image/png";
+    if (/\.webp$/i.test(name)) return "image/webp";
+    return "";
+  }
+
   function saveCourseCover(courseId, file) {
     if (!requireAdmin()) return Promise.resolve({ ok: false, message: "관리자만 이미지를 올릴 수 있습니다." });
     if (!file) return Promise.resolve({ ok: false, message: "이미지 파일을 선택해 주세요." });
-    var contentType = file.type === "image/jpeg" || file.type === "image/png" || file.type === "image/webp" ? file.type : "";
+    var contentType = imageType(file);
     if (!contentType) return Promise.resolve({ ok: false, message: "JPG, PNG, WEBP 이미지만 올릴 수 있습니다." });
     if (!file.size || file.size > 5 * 1024 * 1024) return Promise.resolve({ ok: false, message: "이미지는 5MB 이하로 올려 주세요." });
-    return api("/api/courses/" + encodeURIComponent(courseId) + "/cover/upload", {
+    return fetch("/api/courses/" + encodeURIComponent(courseId) + "/cover", {
       method: "POST",
-      body: { contentType: contentType, size: file.size }
-    }).then(function (ticket) {
-      if (!ticket.ok) return ticket;
-      return fetch(ticket.uploadUrl, {
-        method: "PUT",
-        headers: { "Content-Type": ticket.contentType || contentType },
-        body: file
-      }).then(function (response) {
-        if (!response.ok) return { ok: false, message: "이미지 저장소에 올리지 못했습니다." };
-        return api("/api/courses/" + encodeURIComponent(courseId) + "/cover/complete", {
-          method: "POST",
-          body: { key: ticket.key, contentType: ticket.contentType || contentType, size: file.size }
-        });
+      credentials: "same-origin",
+      headers: { "Content-Type": contentType },
+      body: file
+    }).then(function (response) {
+      return response.json().catch(function () {
+        return { ok: false, message: "이미지를 저장하지 못했습니다." };
       });
     }).then(function (result) {
       if (!result.ok) return result;

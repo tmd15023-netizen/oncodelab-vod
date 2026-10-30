@@ -18,7 +18,9 @@
   }
 
   function isImage(file) {
-    return !!(file && (file.type === "image/jpeg" || file.type === "image/png" || file.type === "image/webp"));
+    if (!file) return false;
+    if (file.type === "image/jpeg" || file.type === "image/png" || file.type === "image/webp") return true;
+    return /\.(jpe?g|png|webp)$/i.test(file.name || "");
   }
 
   function isVideo(file) {
@@ -302,7 +304,9 @@
           '<div class="file-line"><input type="file" data-cover-for="' + window.VodUI.esc(course.id) + '" accept="image/jpeg,image/png,image/webp" />' +
           '<button type="button" class="btn small primary" data-upload-cover="' + window.VodUI.esc(course.id) + '"' + (busy ? " disabled" : "") + ">이미지 올리기</button>" +
           removeCover + "</div>" +
-          '<p class="fine">JPG, PNG, WEBP · 5MB 이하. 강의 소개 왼쪽에 표시됩니다.</p></div>' +
+          '<p class="fine">JPG, PNG, WEBP · 5MB 이하. 강의 소개 왼쪽에 표시됩니다.</p>' +
+          (/이미지|자격증/.test(status.text) ? '<p class="cover-status' + (status.error ? " is-error" : "") + '">' + window.VodUI.esc(status.text) + "</p>" : "") +
+          "</div>" +
         "<h3>회차 영상</h3>" +
         (lessonBody || '<p class="fine">아직 회차가 없습니다. 아래에서 회차와 영상을 추가하세요.</p>') +
         '<form class="manage-form" data-add-lesson="' + window.VodUI.esc(course.id) + '">' +
@@ -430,6 +434,8 @@
         busy = false;
         setStatus(result.ok ? "자격증 이미지를 저장했습니다." : result.message, !result.ok);
         render();
+        var box = document.querySelector(".cover-box");
+        if (box && box.scrollIntoView) box.scrollIntoView({ block: "center" });
       });
       return;
     }
