@@ -457,6 +457,13 @@ button.course-card {
   object-fit: cover;
 }
 
+.thumb.has-photo,
+.art-card.has-photo,
+.mini-thumb.has-photo,
+.cover-preview {
+  border: 2px solid #000;
+}
+
 .thumb.has-photo .thumb-chip {
   position: absolute;
   top: 14px;
