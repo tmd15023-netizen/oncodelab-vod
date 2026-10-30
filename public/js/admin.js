@@ -29,6 +29,24 @@
     status = { text: text || "", error: !!error };
   }
 
+  /* form.title은 입력창이 아니라 폼의 title 속성이라, 이름 있는 입력은 elements로 읽습니다. */
+  function fieldValue(form, name) {
+    var field = form.elements.namedItem(name);
+    return field && typeof field.value === "string" ? field.value : "";
+  }
+
+  function focusStatus() {
+    var statusNode = document.querySelector(".admin-status");
+    if (statusNode && statusNode.scrollIntoView) statusNode.scrollIntoView({ block: "center" });
+  }
+
+  function focusLesson(lessonId) {
+    var row = document.getElementById("lesson-row-" + lessonId);
+    if (!row) return;
+    row.classList.add("is-new");
+    if (row.scrollIntoView) row.scrollIntoView({ block: "center" });
+  }
+
   function render() {
     var user = window.VodStore.getStudent();
     if (!user) {
@@ -231,7 +249,7 @@
             ? window.VodUI.esc(meta.name) + " · " + bytes(meta.size) + (meta.seconds ? " · " + window.VodUI.clock(meta.seconds) : "")
             : "등록된 영상이 없습니다. 승인된 수강생에게는 샘플 영상이 재생됩니다.";
           var removeVideo = meta ? '<button type="button" class="btn small" data-remove-video="' + window.VodUI.esc(lesson.id) + '">영상 삭제</button>' : "";
-          return '<div class="lesson-admin"><div><strong>' + String(index + 1).padStart(2, "0") + ". " + window.VodUI.esc(lesson.title) + "</strong><p>" + info + "</p></div>" +
+          return '<div class="lesson-admin" id="lesson-row-' + window.VodUI.esc(lesson.id) + '"><div><strong>' + String(index + 1).padStart(2, "0") + ". " + window.VodUI.esc(lesson.title) + "</strong><p>" + info + "</p></div>" +
             '<div class="file-line"><input type="file" data-file-for="' + window.VodUI.esc(lesson.id) + '" accept="video/*" />' +
             '<button type="button" class="btn small primary" data-upload="' + window.VodUI.esc(lesson.id) + '"' + (busy ? " disabled" : "") + ">업로드</button>" +
             removeVideo +
@@ -442,9 +460,9 @@
       event.preventDefault();
       if (busy) return;
       busy = true;
-      window.VodStore.grantEnrollment(grant.getAttribute("data-grant-user"), grant.course.value, {
-        accessStart: grant.start.value,
-        accessEnd: grant.end.value
+      window.VodStore.grantEnrollment(grant.getAttribute("data-grant-user"), fieldValue(grant, "course"), {
+        accessStart: fieldValue(grant, "start"),
+        accessEnd: fieldValue(grant, "end")
       }).then(function (result) {
         busy = false;
         setStatus(result.ok ? "수강을 승인했습니다." : result.message, !result.ok);
@@ -459,10 +477,10 @@
       busy = true;
       setStatus("강의를 추가하는 중입니다.");
       window.VodStore.createCourse({
-        category: addCourse.category.value,
-        title: addCourse.title.value,
-        summary: addCourse.summary.value,
-        audience: addCourse.audience.value
+        category: fieldValue(addCourse, "category"),
+        title: fieldValue(addCourse, "title"),
+        summary: fieldValue(addCourse, "summary"),
+        audience: fieldValue(addCourse, "audience")
       }).then(function (result) {
         busy = false;
         setStatus(result.ok ? "강의를 추가했습니다. 소개와 영상을 이어서 올려 주세요." : result.message, !result.ok);
@@ -477,12 +495,12 @@
       busy = true;
       setStatus("강의 소개를 저장하는 중입니다.");
       window.VodStore.saveCoursePage(pageForm.getAttribute("data-course-page"), {
-        category: pageForm.category.value,
-        title: pageForm.title.value,
-        summary: pageForm.summary.value,
-        audience: pageForm.audience.value,
-        goals: pageForm.goals.value,
-        thumbLines: pageForm.thumbLines.value
+        category: fieldValue(pageForm, "category"),
+        title: fieldValue(pageForm, "title"),
+        summary: fieldValue(pageForm, "summary"),
+        audience: fieldValue(pageForm, "audience"),
+        goals: fieldValue(pageForm, "goals"),
+        thumbLines: fieldValue(pageForm, "thumbLines")
       }).then(function (result) {
         busy = false;
         setStatus(result.ok ? "강의 소개를 저장했습니다." : result.message, !result.ok);
@@ -494,37 +512,59 @@
     if (!form) return;
     event.preventDefault();
     if (busy) return;
-    var file = form.video.files && form.video.files[0];
+    var fileInput = form.elements.namedItem("video");
+    var file = fileInput && fileInput.files && fileInput.files[0];
+    var chapterTitle = fieldValue(form, "chapter").trim();
+    var lessonTitle = fieldValue(form, "title").trim();
+    if (!chapterTitle) {
+      setStatus("챕터 이름을 입력해 주세요. 새 이름이면 새 챕터가 만들어집니다.", true);
+      render();
+      focusStatus();
+      return;
+    }
+    if (lessonTitle.length < 2) {
+      setStatus("회차 제목을 두 글자 이상 입력한 뒤 회차 추가를 눌러 주세요.", true);
+      render();
+      focusStatus();
+      return;
+    }
     if (file && !isVideo(file)) {
       setStatus("동영상 파일만 올릴 수 있습니다.", true);
       render();
+      focusStatus();
       return;
     }
     busy = true;
     setStatus(file ? "회차를 추가하고 영상을 저장하는 중입니다." : "회차를 추가하는 중입니다.");
+    render();
+    focusStatus();
     window.VodStore.addLesson({
       courseId: form.getAttribute("data-add-lesson"),
-      chapterTitle: form.chapter.value,
-      title: form.title.value,
-      summary: form.summary.value
+      chapterTitle: chapterTitle,
+      title: lessonTitle,
+      summary: fieldValue(form, "summary")
     }).then(function (created) {
       if (!created.ok) {
         busy = false;
         setStatus(created.message, true);
         render();
+        focusStatus();
         return;
       }
       if (!file) {
         busy = false;
-        setStatus("회차를 추가했습니다.");
+        setStatus(chapterTitle + " 챕터에 '" + lessonTitle + "' 회차를 추가했습니다.");
         render();
+        focusLesson(created.id);
         return;
       }
       render();
+      focusLesson(created.id);
       window.VodStore.saveVideo(created.id, file).then(function (result) {
         busy = false;
-        setStatus(result.ok ? "회차와 영상을 저장했습니다." : "회차는 추가됐지만 영상을 저장하지 못했습니다. " + result.message, !result.ok);
+        setStatus(result.ok ? chapterTitle + " 챕터에 회차와 영상을 저장했습니다." : "회차는 추가됐지만 영상을 저장하지 못했습니다. " + result.message, !result.ok);
         render();
+        focusLesson(created.id);
       });
     });
   });

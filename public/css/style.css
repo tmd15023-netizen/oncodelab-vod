@@ -1010,6 +1010,7 @@ img { display: block; max-width: 100%; }
 }
 
 .admin-course h2 { font-size: 22px; }
+.lesson-admin.is-new { outline: 2px solid var(--blue); background: #f3f7ff; }
 
 .lesson-admin {
   display: grid;
