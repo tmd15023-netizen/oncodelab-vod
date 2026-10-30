@@ -2,6 +2,8 @@
   window.VodStore.ready.then(function () {
   var root = document.getElementById("app");
   var tab = "home";
+  var selectedCourseId = "";
+  var creatingCourse = false;
   var filter = "pending";
   var status = { text: "", error: false };
   var busy = false;
@@ -222,8 +224,25 @@
     };
   }
 
-  function coursesPanel() {
-    var adder =
+  function courseGrid() {
+    var cards = window.VodCatalog.courses.map(function (course) {
+      var count = 0;
+      (course.chapters || []).forEach(function (chapter) {
+        count += (chapter.lessons || []).length;
+      });
+      return '<button type="button" class="course-card" data-pick-course="' + window.VodUI.esc(course.id) + '">' +
+        window.VodUI.thumbBlock(course, "VOD · " + window.VodUI.esc(course.category)) +
+        '<h3 class="card-title">' + window.VodUI.esc(course.title) + "</h3>" +
+        '<p class="card-desc">' + window.VodUI.esc(course.summary) + "</p>" +
+        '<p class="card-meta">' + count + "강</p></button>";
+    }).join("");
+    return '<p class="fine">카드를 누르면 그 강의의 소개와 영상만 수정합니다.</p>' +
+      '<div class="card-grid">' + cards +
+      '<button type="button" class="course-card admin-add" data-new-course><span class="admin-add-mark" aria-hidden="true">+</span><strong>강의 추가</strong><span>새 강의 카드를 만듭니다.</span></button></div>';
+  }
+
+  function newCourseForm() {
+    return '<p><button type="button" class="btn" data-course-back>강의 목록</button></p>' +
       '<form class="manage-form" data-add-course>' +
         "<h3>새 강의</h3>" +
         '<label class="field">분류<input name="category" required maxlength="20" placeholder="자격증" /></label>' +
@@ -232,10 +251,16 @@
         '<label class="field">수강 대상<input name="audience" maxlength="200" placeholder="어떤 수강생에게 맞는 강의인지" /></label>' +
         '<button class="btn primary" type="submit"' + (busy ? " disabled" : "") + ">강의 추가</button>" +
       "</form>";
-    if (!window.VodCatalog.courses.length) {
-      return adder + '<div class="empty"><strong>등록된 강의가 없습니다</strong><p>강의를 추가한 뒤 소개와 영상을 이어서 올릴 수 있습니다.</p></div>';
-    }
-    return adder + window.VodCatalog.courses.map(function (course) {
+  }
+
+  function coursesPanel() {
+    if (creatingCourse) return newCourseForm();
+    var course = null;
+    window.VodCatalog.courses.forEach(function (item) {
+      if (item.id === selectedCourseId) course = item;
+    });
+    if (!course) return courseGrid();
+    return '<p><button type="button" class="btn" data-course-back>강의 목록</button></p>' + [course].map(function (course) {
       var preview = course.coverUrl
         ? '<img class="cover-preview" src="' + window.VodUI.esc(course.coverUrl) + '" alt="" />'
         : '<div class="thumb tone-' + window.VodUI.esc(course.tone) + ' cover-fallback"><strong>이미지 없음</strong></div>';
@@ -296,6 +321,29 @@
     var tabButton = event.target.closest("[data-tab]");
     if (tabButton) {
       tab = tabButton.getAttribute("data-tab");
+      if (tab === "courses") {
+        selectedCourseId = "";
+        creatingCourse = false;
+      }
+      render();
+      return;
+    }
+    var pickCourse = event.target.closest("[data-pick-course]");
+    if (pickCourse) {
+      selectedCourseId = pickCourse.getAttribute("data-pick-course");
+      creatingCourse = false;
+      render();
+      return;
+    }
+    if (event.target.closest("[data-new-course]")) {
+      creatingCourse = true;
+      selectedCourseId = "";
+      render();
+      return;
+    }
+    if (event.target.closest("[data-course-back]")) {
+      creatingCourse = false;
+      selectedCourseId = "";
       render();
       return;
     }
@@ -405,6 +453,7 @@
       busy = true;
       window.VodStore.deleteCourse(removeCourse.getAttribute("data-delete-course")).then(function (result) {
         busy = false;
+        if (result.ok) selectedCourseId = "";
         setStatus(result.ok ? "강의를 삭제했습니다." : result.message, !result.ok);
         render();
       });
@@ -483,6 +532,8 @@
         audience: fieldValue(addCourse, "audience")
       }).then(function (result) {
         busy = false;
+        creatingCourse = false;
+        if (result.ok && result.id) selectedCourseId = result.id;
         setStatus(result.ok ? "강의를 추가했습니다. 소개와 영상을 이어서 올려 주세요." : result.message, !result.ok);
         render();
       });

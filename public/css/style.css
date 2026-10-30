@@ -365,6 +365,39 @@ img { display: block; max-width: 100%; }
   box-shadow: 0 16px 40px rgba(31, 41, 55, 0.1);
 }
 
+button.course-card {
+  width: 100%;
+  border: 1px solid rgba(22, 32, 51, 0.04);
+  background: #fff;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.admin-add {
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-height: 280px;
+  border: 1px dashed #c5cedd;
+  background: transparent;
+  box-shadow: none;
+  color: var(--muted);
+}
+
+.admin-add strong { color: var(--ink); font-size: 18px; }
+.admin-add-mark {
+  display: grid;
+  place-items: center;
+  width: 48px;
+  height: 48px;
+  border-radius: 50%;
+  background: var(--blue);
+  color: #fff;
+  font-size: 28px;
+  line-height: 1;
+}
+
 .thumb {
   position: relative;
   display: flex;
