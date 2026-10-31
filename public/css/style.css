@@ -194,6 +194,15 @@ img { display: block; max-width: 100%; }
   margin: 8px 0 12px;
 }
 
+.hero-tagline {
+  margin: -4px 0 14px;
+  color: var(--ink);
+  font-size: 18px;
+  font-weight: 700;
+  letter-spacing: -0.03em;
+  line-height: 1.45;
+}
+
 .lede {
   color: var(--muted);
   font-size: 16px;

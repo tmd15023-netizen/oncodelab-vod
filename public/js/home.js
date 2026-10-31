@@ -69,8 +69,9 @@
     return '<section class="hero">' +
       "<div>" +
         '<p class="eyebrow"><span class="dot" aria-hidden="true"></span>ONCODELAB VOD</p>' +
-        "<h1>녹화 강의를<br />이어서 보는 학습 홈</h1>" +
-        '<p class="lede">AI-POT, 디지털 홍보물, 홈페이지 제작, 바이브코딩 수업을 회차별로 시청합니다.<br>보던 위치는 로그인한 계정에 남습니다.</p>' +
+        "<h1>배움의 시작,<br>성장의 완성</h1>" +
+        '<p class="hero-tagline">당신의 가능성을 넓히는 스마트 러닝 플랫폼</p>' +
+        '<p class="lede">AI부터 디지털 실무 역량까지.<br>언제 어디서나, 당신의 성장을 이어가세요.</p>' +
         '<div class="hero-actions">' +
           '<a class="btn primary" href="courses.html">전체 강의 보기</a>' +
           '<a class="btn" href="#path">추천 학습 순서</a>' +
