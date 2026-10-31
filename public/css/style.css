@@ -522,7 +522,10 @@ button.course-card {
 .tone-forest { background: linear-gradient(145deg, #052e16, #166534 50%, #d6d3a8); }
 .tone-amber { background: linear-gradient(145deg, #451a03, #b45309 48%, #fcd34d); }
 .tone-plum { background: linear-gradient(145deg, #3b0764, #a21caf 52%, #f0abfc); }
-.tone-slate { background: linear-gradient(145deg, #0f172a, #1e293b 55%, #64748b); }
+.tone-slate { background: linear-gradient(145deg, #64748b, #94a3b8 48%, #dbe3ec); color: #1e293b; }
+.tone-swatch.tone-slate { color: #1e293b; text-shadow: none; }
+.thumb.tone-slate,
+.art-card.tone-slate { color: #1e293b; }
 
 .tone-field { display: grid; gap: 8px; }
 .tone-picker { display: flex; flex-wrap: wrap; gap: 8px; }
