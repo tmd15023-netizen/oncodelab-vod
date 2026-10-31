@@ -8,6 +8,8 @@
   var creatingCourse = false;
   var filter = "pending";
   var enrollQuery = "";
+  var selectedUserId = "";
+  var memberQuery = "";
   var status = { text: "", error: false };
   var busy = false;
 
@@ -169,44 +171,78 @@
       "</section>";
   }
 
+  function memberRoleText(user, self) {
+    if (user.role === "admin") return "관리자" + (self ? " · 본인" : "");
+    return "수강생";
+  }
+
+  function memberDetail(user) {
+    var me = window.VodStore.getStudent();
+    var rows = window.VodStore.listEnrollments().filter(function (item) { return item.userId === user.id; });
+    var list = rows.length
+      ? rows.map(function (item) {
+          return "<li><strong>" + window.VodUI.esc(item.courseTitle) + "</strong> · " + accessLabel(item) +
+            (periodText(item) ? " · " + window.VodUI.esc(periodText(item)) : "") + "</li>";
+        }).join("")
+      : "<li>수강 내역이 없습니다.</li>";
+    /* 기본 관리자(admin@ncodelab.kr)는 서버가 ADMIN_PASSWORD로 관리하므로 권한을 바꾸지 않습니다. */
+    var self = me && user.id === me.id;
+    var locked = self || user.email === "admin@ncodelab.kr";
+    var roleButton = "";
+    if (!locked && user.role !== "admin") {
+      roleButton = '<button type="button" class="btn small primary" data-role="admin" data-user-id="' + window.VodUI.esc(user.id) + '" data-user-name="' + window.VodUI.esc(user.name) + '">관리자로 전환</button>';
+    } else if (!locked && user.role === "admin") {
+      roleButton = '<button type="button" class="btn small" data-role="student" data-user-id="' + window.VodUI.esc(user.id) + '" data-user-name="' + window.VodUI.esc(user.name) + '">수강생으로 변경</button>';
+    }
+    var deleteButton = user.role === "admin" ? "" : '<button type="button" class="btn small danger" data-delete-user="' + window.VodUI.esc(user.id) + '" data-user-name="' + window.VodUI.esc(user.name) + '">회원 삭제</button>';
+    var grant = user.role === "admin" ? "" :
+      '<form class="manage-form" data-grant-user="' + window.VodUI.esc(user.id) + '">' +
+        "<h3>수강 승인</h3>" +
+        '<label class="field">강의<select name="course" required>' + courseOptions() + "</select></label>" +
+        '<div class="period-fields"><label class="field">시작일<input name="start" type="date" /></label>' +
+        '<label class="field">종료일<input name="end" type="date" /></label></div>' +
+        '<button class="btn primary" type="submit">이 강의 승인</button>' +
+      "</form>";
+    return '<p><button type="button" class="btn" data-member-back>회원 목록</button></p>' +
+      '<section class="member-card"><div class="member-head"><div><strong>' + window.VodUI.esc(user.name) + "</strong><p>" +
+      window.VodUI.esc(user.email) + " · " + memberRoleText(user, self) + " · 가입 " + window.VodUI.esc(window.VodUI.formatWhen(user.createdAt)) + "</p></div>" +
+      '<div class="member-actions">' + roleButton + deleteButton + "</div></div>" +
+      "<h3>수강 내역</h3>" +
+      '<ul class="user-list">' + list + "</ul>" + grant + "</section>";
+  }
+
   function membersPanel() {
     var me = window.VodStore.getStudent();
     var users = window.VodStore.listUsers();
+    if (selectedUserId) {
+      var picked = null;
+      users.forEach(function (user) { if (user.id === selectedUserId) picked = user; });
+      if (picked) return memberDetail(picked);
+      selectedUserId = "";
+    }
     if (!users.length) {
       return '<div class="empty"><strong>등록된 회원이 없습니다</strong><p>회원가입한 수강생이 이곳에 나타납니다.</p></div>';
     }
-    return users.map(function (user) {
-      var rows = window.VodStore.listEnrollments().filter(function (item) { return item.userId === user.id; });
-      var list = rows.length
-        ? rows.map(function (item) {
-            return "<li><strong>" + window.VodUI.esc(item.courseTitle) + "</strong> · " + accessLabel(item) +
-              (periodText(item) ? " · " + window.VodUI.esc(periodText(item)) : "") + "</li>";
-          }).join("")
-        : "<li>승인된 강의가 없습니다.</li>";
-      /* 기본 관리자(admin@ncodelab.kr)는 서버가 ADMIN_PASSWORD로 관리하므로 권한을 바꾸지 않습니다. */
+    var query = memberQuery.trim().toLowerCase();
+    var shown = users.filter(function (user) {
+      if (!query) return true;
+      return (user.name + " " + user.email).toLowerCase().indexOf(query) !== -1;
+    });
+    var rows = shown.map(function (user) {
+      var count = window.VodStore.listEnrollments().filter(function (item) { return item.userId === user.id; }).length;
       var self = me && user.id === me.id;
-      var locked = self || user.email === "admin@ncodelab.kr";
-      var roleButton = "";
-      if (!locked && user.role !== "admin") {
-        roleButton = '<button type="button" class="btn small primary" data-role="admin" data-user-id="' + window.VodUI.esc(user.id) + '" data-user-name="' + window.VodUI.esc(user.name) + '">관리자로 전환</button>';
-      } else if (!locked && user.role === "admin") {
-        roleButton = '<button type="button" class="btn small" data-role="student" data-user-id="' + window.VodUI.esc(user.id) + '" data-user-name="' + window.VodUI.esc(user.name) + '">수강생으로 변경</button>';
-      }
-      var deleteButton = user.role === "admin" ? "" : '<button type="button" class="btn small danger" data-delete-user="' + window.VodUI.esc(user.id) + '" data-user-name="' + window.VodUI.esc(user.name) + '">회원 삭제</button>';
-      var roleLabel = user.role === "admin" ? " · 관리자" + (self ? " · 본인" : "") : "";
-      var grant = user.role === "admin" ? "" :
-        '<form class="manage-form" data-grant-user="' + window.VodUI.esc(user.id) + '">' +
-          "<h3>수강 승인</h3>" +
-          '<label class="field">강의<select name="course" required>' + courseOptions() + "</select></label>" +
-          '<div class="period-fields"><label class="field">시작일<input name="start" type="date" /></label>' +
-          '<label class="field">종료일<input name="end" type="date" /></label></div>' +
-          '<button class="btn primary" type="submit">이 강의 승인</button>' +
-        "</form>";
-      return '<section class="member-card"><div class="member-head"><div><strong>' + window.VodUI.esc(user.name) + "</strong><p>" +
-        window.VodUI.esc(user.email) + roleLabel + " · 가입 " + window.VodUI.esc(window.VodUI.formatWhen(user.createdAt)) + "</p></div>" +
-        '<div class="member-actions">' + roleButton + deleteButton + "</div></div>" +
-        '<ul class="user-list">' + list + "</ul>" + grant + "</section>";
+      return '<button type="button" class="member-row" data-pick-user="' + window.VodUI.esc(user.id) + '">' +
+        '<strong class="member-name">' + window.VodUI.esc(user.name) + "</strong>" +
+        '<span class="member-mail">' + window.VodUI.esc(user.email) + "</span>" +
+        "<span>" + memberRoleText(user, self) + "</span>" +
+        "<span>" + (user.role === "admin" ? "—" : count + "개") + "</span>" +
+        '<span class="member-chevron" aria-hidden="true">›</span></button>';
     }).join("");
+    var body = rows || '<div class="empty"><strong>검색 결과가 없습니다</strong><p>이름이나 이메일로 다시 찾아 보세요.</p></div>';
+    return '<section class="section"><div class="enroll-tools"><p class="enroll-count">' + shown.length + "명</p>" +
+      '<div class="search"><input type="search" data-member-query placeholder="이름, 이메일" value="' + window.VodUI.esc(memberQuery) + '" aria-label="회원 검색" /></div></div>' +
+      '<div class="member-head-row"><span>이름</span><span>이메일</span><span>구분</span><span>수강</span><span></span></div>' +
+      '<div class="member-list">' + body + "</div></section>";
   }
 
   function enrollPanel() {
@@ -375,9 +411,19 @@
   }
 
   root.addEventListener("input", function (event) {
-    if (!event.target.matches("[data-enroll-query]")) return;
-    enrollQuery = event.target.value;
-    applyEnrollQuery();
+    if (event.target.matches("[data-enroll-query]")) {
+      enrollQuery = event.target.value;
+      applyEnrollQuery();
+      return;
+    }
+    if (!event.target.matches("[data-member-query]")) return;
+    memberQuery = event.target.value;
+    var caret = event.target.selectionStart;
+    render();
+    var again = root.querySelector("[data-member-query]");
+    if (!again) return;
+    again.focus();
+    if (again.setSelectionRange) again.setSelectionRange(caret, caret);
   });
 
   root.addEventListener("click", function (event) {
@@ -388,6 +434,7 @@
         selectedCourseId = "";
         creatingCourse = false;
       }
+      if (tab === "members") selectedUserId = "";
       render();
       return;
     }
@@ -407,6 +454,17 @@
     if (event.target.closest("[data-course-back]")) {
       creatingCourse = false;
       selectedCourseId = "";
+      render();
+      return;
+    }
+    var pickUser = event.target.closest("[data-pick-user]");
+    if (pickUser) {
+      selectedUserId = pickUser.getAttribute("data-pick-user");
+      render();
+      return;
+    }
+    if (event.target.closest("[data-member-back]")) {
+      selectedUserId = "";
       render();
       return;
     }
@@ -572,8 +630,10 @@
     var name = removeUser.getAttribute("data-user-name") || "이 회원";
     if (!window.confirm(name + " 계정과 수강 기록을 삭제할까요?")) return;
     busy = true;
-    window.VodStore.deleteUser(removeUser.getAttribute("data-delete-user")).then(function (result) {
+    var removedId = removeUser.getAttribute("data-delete-user");
+    window.VodStore.deleteUser(removedId).then(function (result) {
       busy = false;
+      if (result.ok && removedId === selectedUserId) selectedUserId = "";
       setStatus(result.ok ? "회원을 삭제했습니다." : result.message, !result.ok);
       render();
     });

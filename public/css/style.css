@@ -1138,19 +1138,66 @@ button.course-card {
 .dash-card span { color: var(--muted); font-size: 13px; font-weight: 700; }
 
 .member-card { margin-top: 14px; }
+.member-card h3 { margin: 16px 0 8px; font-size: 16px; }
+.member-head-row,
+.member-row {
+  display: grid;
+  grid-template-columns: minmax(0, 0.7fr) minmax(0, 1.3fr) 108px 56px 16px;
+  gap: 8px 12px;
+  align-items: center;
+}
+.member-head-row {
+  padding: 0 14px 6px;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 800;
+}
+.member-list { display: grid; gap: 8px; }
+.member-row {
+  width: 100%;
+  padding: 10px 14px;
+  border: 0;
+  border-radius: 16px;
+  background: #fff;
+  box-shadow: var(--shadow);
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.member-row span {
+  overflow: hidden;
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.member-name { font-size: 14px; }
+.member-chevron { color: var(--muted); font-size: 18px; font-weight: 700; }
 .member-head,
 .member-actions { display: flex; justify-content: space-between; gap: 8px; align-items: center; flex-wrap: wrap; }
 .member-actions { justify-content: flex-end; }
 .member-head p,
 .period-fields { color: var(--muted); }
 .period-fields {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 180px));
-  gap: 8px 12px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px 16px;
   margin-top: 8px;
 }
-.period-fields .field { min-width: 0; margin: 0; }
-.period-fields .field input { min-width: 0; }
+.period-fields .field {
+  flex: 1 1 260px;
+  max-width: 280px;
+  min-width: 260px;
+  margin: 0;
+}
+.period-fields .field input {
+  box-sizing: border-box;
+  width: 100%;
+  min-width: 0;
+  max-width: 100%;
+}
 
 .enroll-tools {
   display: flex;
@@ -1351,7 +1398,19 @@ button.course-card {
   .progress-row,
   .enroll-row { grid-template-columns: 1fr; }
   .enroll-row { display: grid; }
-  .enroll-head { display: none; }
+  .enroll-head,
+  .member-head-row { display: none; }
+  .member-row {
+    grid-template-columns: minmax(0, 1fr) auto auto 16px;
+    grid-template-areas:
+      "name role count chev"
+      "mail mail mail mail";
+  }
+  .member-name { grid-area: name; }
+  .member-mail { grid-area: mail; }
+  .member-row span:nth-child(3) { grid-area: role; }
+  .member-row span:nth-child(4) { grid-area: count; }
+  .member-chevron { grid-area: chev; }
   .enroll-row.enroll-edit {
     grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
     padding: 12px;
