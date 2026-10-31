@@ -7,6 +7,7 @@
   var selectedCourseId = "";
   var creatingCourse = false;
   var filter = "pending";
+  var enrollQuery = "";
   var status = { text: "", error: false };
   var busy = false;
 
@@ -83,13 +84,32 @@
         '<p class="admin-status' + (status.error ? " is-error" : "") + '" role="status">' + window.VodUI.esc(status.text) + "</p>" +
         '<div class="hero-actions"><button type="button" class="btn" data-logout>로그아웃</button></div>' +
       "</header>" +
-      '<div class="admin-tabs" role="tablist">' +
+        '<div class="admin-tabs" role="tablist">' +
         '<button type="button" class="chip" data-tab="home" aria-pressed="' + (tab === "home" ? "true" : "false") + '">대시보드</button>' +
         '<button type="button" class="chip" data-tab="members" aria-pressed="' + (tab === "members" ? "true" : "false") + '">회원</button>' +
         '<button type="button" class="chip" data-tab="enroll" aria-pressed="' + (tab === "enroll" ? "true" : "false") + '">수강 승인' + (pending ? " " + pending : "") + "</button>" +
         '<button type="button" class="chip" data-tab="courses" aria-pressed="' + (tab === "courses" ? "true" : "false") + '">강의</button>' +
       "</div>" +
       panel;
+    applyEnrollQuery();
+  }
+
+  function applyEnrollQuery() {
+    var box = root.querySelector("[data-enroll-query]");
+    if (!box) return;
+    var query = box.value.trim().toLowerCase();
+    var count = 0;
+    var rows = root.querySelectorAll("[data-enroll-item]");
+    rows.forEach(function (row) {
+      var hay = (row.getAttribute("data-enroll-item") || "").toLowerCase();
+      var show = !query || hay.indexOf(query) !== -1;
+      row.hidden = !show;
+      if (show) count += 1;
+    });
+    var note = root.querySelector("[data-enroll-count]");
+    if (note) note.textContent = count + "건";
+    var empty = root.querySelector("[data-enroll-none]");
+    if (empty) empty.hidden = count !== 0 || !rows.length;
   }
 
   function dateInputValue(timestamp) {
@@ -202,21 +222,25 @@
       return '<button type="button" class="chip" data-filter="' + item[0] + '" aria-pressed="' + (filter === item[0] ? "true" : "false") + '">' + item[1] + "</button>";
     }).join("");
     var body = rows.length
-      ? rows.map(function (item) {
+      ? '<div class="enroll-head"><span>회원</span><span>강의</span><span>시작일</span><span>종료일</span><span>처리</span></div>' +
+        rows.map(function (item) {
           var label = accessLabel(item);
           var pill = item.status === "approved" && label !== "수강 중" ? "pending" : item.status;
-          return '<article class="enroll-row enroll-edit">' +
-            "<div><strong>" + window.VodUI.esc(item.name) + "</strong>" +
-            "<p>" + window.VodUI.esc(item.email) + " · " + window.VodUI.esc(item.courseTitle) +
-            (periodText(item) ? " · " + window.VodUI.esc(periodText(item)) : "") + "</p>" +
-            '<div class="period-fields"><label class="field">시작일<input type="date" data-start-for="' + window.VodUI.esc(item.id) + '" value="' + dateInputValue(item.accessStart) + '" /></label>' +
-            '<label class="field">종료일<input type="date" data-end-for="' + window.VodUI.esc(item.id) + '" value="' + dateInputValue(item.accessEnd) + '" /></label></div></div>' +
+          var hay = item.name + " " + item.email + " " + item.courseTitle;
+          return '<article class="enroll-row enroll-edit" data-enroll-item="' + window.VodUI.esc(hay) + '">' +
+            '<div class="enroll-who"><strong>' + window.VodUI.esc(item.name) + "</strong><span>" + window.VodUI.esc(item.email) + "</span></div>" +
+            '<p class="enroll-course">' + window.VodUI.esc(item.courseTitle) + "</p>" +
+            '<label class="date-field"><span>시작</span><input type="date" aria-label="' + window.VodUI.esc(item.name) + ' 시작일" data-start-for="' + window.VodUI.esc(item.id) + '" value="' + dateInputValue(item.accessStart) + '" /></label>' +
+            '<label class="date-field"><span>종료</span><input type="date" aria-label="' + window.VodUI.esc(item.name) + ' 종료일" data-end-for="' + window.VodUI.esc(item.id) + '" value="' + dateInputValue(item.accessEnd) + '" /></label>' +
             '<div class="enroll-actions"><span class="pill ' + window.VodUI.esc(pill) + '">' + label + "</span>" +
             '<button type="button" class="btn small primary" data-approve="' + window.VodUI.esc(item.id) + '">승인</button>' +
             '<button type="button" class="btn small" data-reject="' + window.VodUI.esc(item.id) + '"' + (item.status === "rejected" ? " disabled" : "") + ">거절</button></div></article>";
-        }).join("")
+        }).join("") +
+        '<div class="empty" data-enroll-none hidden><strong>검색 결과가 없습니다</strong><p>이름, 이메일, 강의 이름으로 다시 찾아 보세요.</p></div>'
       : '<div class="empty"><strong>표시할 신청이 없습니다</strong><p>수강생이 강의에서 수강 신청을 하면 이곳에 나타납니다.</p></div>';
-    return '<section class="section"><div class="chips">' + filters + '</div><div class="stack">' + body + "</div></section>";
+    return '<section class="section enroll-board"><div class="enroll-tools"><div class="chips">' + filters + '</div>' +
+      '<div class="search"><input type="search" data-enroll-query placeholder="이름, 이메일, 강의" value="' + window.VodUI.esc(enrollQuery) + '" aria-label="수강 신청 검색" /></div></div>' +
+      '<p class="enroll-count" data-enroll-count>' + rows.length + '건</p><div class="stack">' + body + "</div></section>";
   }
 
   function periodFrom(id) {
@@ -349,6 +373,12 @@
         "</form></section>";
     }).join("");
   }
+
+  root.addEventListener("input", function (event) {
+    if (!event.target.matches("[data-enroll-query]")) return;
+    enrollQuery = event.target.value;
+    applyEnrollQuery();
+  });
 
   root.addEventListener("click", function (event) {
     var tabButton = event.target.closest("[data-tab]");

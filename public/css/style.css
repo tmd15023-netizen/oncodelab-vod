@@ -1143,9 +1143,103 @@ button.course-card {
 .member-actions { justify-content: flex-end; }
 .member-head p,
 .period-fields { color: var(--muted); }
-.period-fields { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 8px; }
-.period-fields .field { min-width: 150px; margin: 0; }
-.enroll-edit { align-items: flex-start; }
+.period-fields {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 180px));
+  gap: 8px 12px;
+  margin-top: 8px;
+}
+.period-fields .field { min-width: 0; margin: 0; }
+.period-fields .field input { min-width: 0; }
+
+.enroll-tools {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 8px;
+}
+
+.enroll-count {
+  margin: 0 0 8px;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.enroll-head,
+.enroll-row.enroll-edit {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1.1fr) minmax(168px, 186px) minmax(168px, 186px) max-content;
+  gap: 8px 14px;
+  align-items: center;
+}
+
+.enroll-head {
+  padding: 0 14px;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.enroll-who strong { display: block; font-size: 14px; line-height: 1.3; }
+.enroll-who span,
+.enroll-course {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1.35;
+}
+.enroll-course {
+  margin: 0;
+  overflow: hidden;
+  color: var(--ink);
+  font-size: 13px;
+  font-weight: 700;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.date-field {
+  display: grid;
+  gap: 2px;
+  width: 100%;
+  min-width: 0;
+  max-width: 100%;
+  margin: 0;
+  overflow: hidden;
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 800;
+  contain: inline-size;
+}
+.date-field span {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+}
+.date-field input {
+  box-sizing: border-box;
+  display: block;
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
+  height: 32px;
+  padding: 0 6px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: #fff;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.enroll-row.enroll-edit { padding: 8px 14px; }
+.enroll-row.enroll-edit .enroll-actions { flex-wrap: nowrap; justify-content: flex-end; }
+.enroll-row.enroll-edit .btn.small { height: 32px; }
 
 .admin-status { min-height: 1.4em; margin-top: 10px; color: var(--blue-deep); font-weight: 800; }
 .admin-status.is-error { color: #d12b4a; }
@@ -1257,6 +1351,19 @@ button.course-card {
   .progress-row,
   .enroll-row { grid-template-columns: 1fr; }
   .enroll-row { display: grid; }
+  .enroll-head { display: none; }
+  .enroll-row.enroll-edit {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    padding: 12px;
+  }
+  .enroll-row.enroll-edit .enroll-actions { grid-column: 1 / -1; }
+  .date-field span {
+    position: static;
+    width: auto;
+    height: auto;
+    overflow: visible;
+    clip: auto;
+  }
   .stat-row { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); }
   .hero h1,
   .page-intro h1,
