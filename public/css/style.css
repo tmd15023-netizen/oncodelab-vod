@@ -688,7 +688,13 @@ button.course-card {
   box-shadow: var(--shadow);
 }
 
-.detail-hero .thumb { min-height: 240px; height: 100%; border-radius: 18px; }
+.detail-hero .thumb {
+  box-sizing: border-box;
+  align-self: stretch;
+  height: auto;
+  min-height: 240px;
+  border-radius: 18px;
+}
 .detail-copy h1 { font-size: 32px; }
 .meta-line { color: var(--muted); font-size: 14px; font-weight: 700; }
 .audience { margin-top: 14px; color: var(--muted); font-size: 14px; line-height: 1.6; }
