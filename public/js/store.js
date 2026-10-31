@@ -575,7 +575,8 @@
         audience: input.audience,
         category: input.category,
         goals: input.goals,
-        thumbLines: input.thumbLines
+        thumbLines: input.thumbLines,
+        tone: input.tone
       }
     }).then(function (result) {
       if (!result.ok) return result;
@@ -607,7 +608,8 @@
         audience: input.audience,
         category: input.category,
         goals: input.goals,
-        thumbLines: input.thumbLines
+        thumbLines: input.thumbLines,
+        tone: input.tone
       }
     }).then(function (result) {
       if (!result.ok) return result;

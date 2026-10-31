@@ -182,7 +182,12 @@ function clipLines(value, count, max) {
 const COVER_EXT = { "image/jpeg": "jpg", "image/png": "png", "image/webp": "webp" };
 const COVER_BYTES = 5 * 1024 * 1024;
 
-const COURSE_TONES = ["violet", "blue", "coral", "teal", "ink"];
+const COURSE_TONES = ["violet", "blue", "teal", "coral", "ink", "wine", "forest", "amber", "plum", "slate"];
+
+function cleanTone(value) {
+  const tone = String(value || "");
+  return COURSE_TONES.indexOf(tone) >= 0 ? tone : "";
+}
 
 async function ensureCourseCatalog(database) {
   const meta = database.collection("meta");
@@ -1087,21 +1092,19 @@ app.patch("/api/courses/:id", route(async function (req, res) {
   if (!category) return res.status(400).json({ ok: false, message: "분류를 입력해 주세요." });
   if (!goals.length) return res.status(400).json({ ok: false, message: "학습 목표를 한 줄 이상 입력해 주세요." });
   if (!thumbLines.length) return res.status(400).json({ ok: false, message: "이미지 없을 때 표시할 문구를 입력해 주세요." });
-  await db.collection("courses").updateOne(
-    { courseId: courseId },
-    {
-      $set: {
-        title: title,
-        summary: summary,
-        audience: audience,
-        category: category,
-        goals: goals,
-        thumbLines: thumbLines,
-        pathLabel: thumbLines[0] || title,
-        updatedAt: new Date()
-      }
-    }
-  );
+  const tone = cleanTone(body.tone);
+  const update = {
+    title: title,
+    summary: summary,
+    audience: audience,
+    category: category,
+    goals: goals,
+    thumbLines: thumbLines,
+    pathLabel: thumbLines[0] || title,
+    updatedAt: new Date()
+  };
+  if (tone) update.tone = tone;
+  await db.collection("courses").updateOne({ courseId: courseId }, { $set: update });
   clearCatalogCache();
   res.json({ ok: true });
 }));
@@ -1120,10 +1123,11 @@ app.post("/api/courses", route(async function (req, res) {
   const count = await db.collection("courses").countDocuments();
   const courseId = "course-" + randomBytes(4).toString("hex");
   const lines = thumbLines.length ? thumbLines : [title.slice(0, 24)];
+  const tone = cleanTone(body.tone) || COURSE_TONES[count % COURSE_TONES.length];
   await db.collection("courses").insertOne({
     courseId: courseId,
     category: category,
-    tone: COURSE_TONES[count % COURSE_TONES.length],
+    tone: tone,
     featured: true,
     pathLabel: lines[0],
     title: title,

@@ -518,6 +518,33 @@ button.course-card {
 .tone-teal { background: linear-gradient(145deg, #134e4a, #0f766e 48%, #5eead4); }
 .tone-coral { background: linear-gradient(145deg, #9f1239, #e11d48 42%, #fb923c); }
 .tone-ink { background: linear-gradient(145deg, #111827, #3730a3 60%, #818cf8); }
+.tone-wine { background: linear-gradient(145deg, #4c0519, #9f1239 48%, #fda4af); }
+.tone-forest { background: linear-gradient(145deg, #052e16, #166534 50%, #d6d3a8); }
+.tone-amber { background: linear-gradient(145deg, #451a03, #b45309 48%, #fcd34d); }
+.tone-plum { background: linear-gradient(145deg, #3b0764, #a21caf 52%, #f0abfc); }
+.tone-slate { background: linear-gradient(145deg, #0f172a, #1e293b 55%, #64748b); }
+
+.tone-field { display: grid; gap: 8px; }
+.tone-picker { display: flex; flex-wrap: wrap; gap: 8px; }
+.tone-swatch {
+  min-width: 68px;
+  height: 44px;
+  padding: 0 10px;
+  border: 2px solid transparent;
+  border-radius: 12px;
+  color: #fff;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 800;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.35);
+  cursor: pointer;
+  box-shadow: 0 8px 18px rgba(23, 32, 51, 0.16);
+}
+.tone-swatch[aria-pressed="true"] {
+  border-color: #fff;
+  outline: 2px solid #171a21;
+  outline-offset: 2px;
+}
 
 .card-title {
   margin: 12px 2px 6px;

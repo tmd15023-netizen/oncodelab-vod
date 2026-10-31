@@ -245,6 +245,31 @@
       '<button type="button" class="course-card admin-add" data-new-course><span class="admin-add-mark" aria-hidden="true">+</span><strong>강의 추가</strong><span>새 강의 카드를 만듭니다.</span></button></div>';
   }
 
+  var tones = [
+    { id: "violet", name: "보라" },
+    { id: "blue", name: "파랑" },
+    { id: "teal", name: "청록" },
+    { id: "coral", name: "코랄" },
+    { id: "ink", name: "남색" },
+    { id: "wine", name: "와인" },
+    { id: "forest", name: "숲" },
+    { id: "amber", name: "앰버" },
+    { id: "plum", name: "자두" },
+    { id: "slate", name: "흑연" }
+  ];
+
+  function tonePicker(selected) {
+    var current = selected || "violet";
+    var known = false;
+    tones.forEach(function (tone) { if (tone.id === current) known = true; });
+    if (!known) current = "violet";
+    return '<div class="tone-field"><span>추천 색상</span><div class="tone-picker" role="radiogroup" aria-label="추천 색상">' +
+      tones.map(function (tone) {
+        return '<button type="button" class="tone-swatch tone-' + tone.id + '" data-tone="' + tone.id + '" aria-pressed="' + (tone.id === current ? "true" : "false") + '">' + tone.name + "</button>";
+      }).join("") +
+      '</div><input type="hidden" name="tone" value="' + current + '" /></div>';
+  }
+
   function newCourseForm() {
     return '<p><button type="button" class="btn" data-course-back>강의 목록</button></p>' +
       '<form class="manage-form" data-add-course>' +
@@ -253,6 +278,7 @@
         '<label class="field">강의 제목<input name="title" required maxlength="80" placeholder="강의 제목" /></label>' +
         '<label class="field">한 줄 소개<input name="summary" required maxlength="300" placeholder="이 강의에서 배우는 내용" /></label>' +
         '<label class="field">수강 대상<input name="audience" maxlength="200" placeholder="어떤 수강생에게 맞는 강의인지" /></label>' +
+        tonePicker("violet") +
         '<button class="btn primary" type="submit"' + (busy ? " disabled" : "") + ">강의 추가</button>" +
       "</form>";
   }
@@ -300,6 +326,7 @@
           '<label class="field">학습 목표<textarea name="goals" rows="4" required maxlength="1000">' + window.VodUI.esc((course.goals || []).join("\n")) + "</textarea></label>" +
           '<p class="fine">학습 목표는 한 줄에 하나씩 입력합니다.</p>' +
           '<label class="field">이미지 없을 때 카드 문구<textarea name="thumbLines" rows="2" required maxlength="80">' + window.VodUI.esc((course.thumbLines || []).join("\n")) + "</textarea></label>" +
+          tonePicker(course.tone) +
           '<button class="btn primary" type="submit"' + (busy ? " disabled" : "") + ">소개 저장</button>" +
         "</form>" +
         '<div class="cover-box"><h3>자격증 이미지</h3>' + preview +
@@ -351,6 +378,17 @@
       creatingCourse = false;
       selectedCourseId = "";
       render();
+      return;
+    }
+    var toneButton = event.target.closest("[data-tone]");
+    if (toneButton) {
+      var picker = toneButton.parentNode;
+      var toneForm = toneButton.closest("form");
+      var toneInput = toneForm && toneForm.querySelector('input[name="tone"]');
+      if (toneInput) toneInput.value = toneButton.getAttribute("data-tone");
+      picker.querySelectorAll("[data-tone]").forEach(function (button) {
+        button.setAttribute("aria-pressed", button === toneButton ? "true" : "false");
+      });
       return;
     }
     var filterButton = event.target.closest("[data-filter]");
@@ -537,7 +575,8 @@
         category: fieldValue(addCourse, "category"),
         title: fieldValue(addCourse, "title"),
         summary: fieldValue(addCourse, "summary"),
-        audience: fieldValue(addCourse, "audience")
+        audience: fieldValue(addCourse, "audience"),
+        tone: fieldValue(addCourse, "tone")
       }).then(function (result) {
         busy = false;
         creatingCourse = false;
@@ -559,7 +598,8 @@
         summary: fieldValue(pageForm, "summary"),
         audience: fieldValue(pageForm, "audience"),
         goals: fieldValue(pageForm, "goals"),
-        thumbLines: fieldValue(pageForm, "thumbLines")
+        thumbLines: fieldValue(pageForm, "thumbLines"),
+        tone: fieldValue(pageForm, "tone")
       }).then(function (result) {
         busy = false;
         setStatus(result.ok ? "강의 소개를 저장했습니다." : result.message, !result.ok);
