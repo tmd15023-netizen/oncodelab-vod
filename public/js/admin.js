@@ -1,4 +1,6 @@
 (function () {
+  var boot = document.getElementById("app");
+  if (boot) boot.innerHTML = '<p class="lede">화면을 준비하고 있습니다.</p>';
   window.VodStore.ready.then(function () {
   var root = document.getElementById("app");
   var tab = "home";

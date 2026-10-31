@@ -276,11 +276,18 @@ function publicChapter(chapter) {
   };
 }
 
+let catalogSnapshot = { at: 0, list: null };
+
+function clearCatalogCache() {
+  catalogSnapshot = { at: 0, list: null };
+}
+
 async function publicCatalog() {
+  const now = Date.now();
+  if (catalogSnapshot.list && now - catalogSnapshot.at < 20000) return catalogSnapshot.list;
   const rows = await db.collection("courses").find({}).sort({ createdAt: 1, title: 1 }).toArray();
-  const list = [];
-  for (const row of rows) {
-    list.push({
+  const list = await Promise.all(rows.map(async function (row) {
+    return {
       id: row.courseId,
       category: row.category || "강의",
       tone: row.tone || "violet",
@@ -293,8 +300,9 @@ async function publicCatalog() {
       thumbLines: Array.isArray(row.thumbLines) && row.thumbLines.length ? row.thumbLines : [row.title || "강의"],
       coverUrl: await coverUrlFor(row.coverKey),
       chapters: (row.chapters || []).map(publicChapter)
-    });
-  }
+    };
+  }));
+  catalogSnapshot = { at: now, list: list };
   return list;
 }
 
@@ -323,6 +331,7 @@ async function pushLesson(courseId, chapterTitle, lesson) {
     { courseId: courseId },
     { $set: { chapters: chapters, updatedAt: new Date() } }
   );
+  clearCatalogCache();
   return true;
 }
 
@@ -340,6 +349,7 @@ async function detachLesson(lessonId) {
       { $set: { chapters: chapters, updatedAt: new Date() } }
     );
   }
+  clearCatalogCache();
 }
 
 async function deleteCourseBundle(courseId) {
@@ -360,6 +370,7 @@ async function deleteCourseBundle(courseId) {
   await db.collection("progress").deleteMany({ courseId: courseId });
   await db.collection("coursePages").deleteOne({ courseId: courseId });
   await db.collection("courses").deleteOne({ courseId: courseId });
+  clearCatalogCache();
   return true;
 }
 
@@ -677,11 +688,14 @@ app.get("/api/health", route(async function (req, res) {
 }));
 
 app.get("/api/session", route(async function (req, res) {
-  const user = await currentUser(req);
+  const userPromise = currentUser(req);
+  const videosPromise = db.collection("videos").find({}, { projection: { key: 0 } }).toArray();
+  const catalogPromise = publicCatalog();
+  const user = await userPromise;
   const isAdmin = !!(user && user.role === "admin");
-  const lessons = await db.collection("lessons").find({}).sort({ createdAt: 1 }).toArray();
-  const videos = await db.collection("videos").find({}, { projection: { key: 0 } }).toArray();
-  const catalogList = await publicCatalog();
+  const videos = await videosPromise;
+  const catalogList = await catalogPromise;
+  const videoRows = videos.map(function (row) { return publicVideo(row, isAdmin); });
   if (!user) {
     res.json({
       ok: true,
@@ -689,26 +703,29 @@ app.get("/api/session", route(async function (req, res) {
       enrollments: [],
       progress: [],
       users: [],
-      lessons: lessons.map(publicLesson),
-      videos: videos.map(function (row) { return publicVideo(row, false); }),
+      lessons: [],
+      videos: videoRows,
       courses: catalogList,
       catalog: catalogList
     });
     return;
   }
-  const enrollments = await enrollmentList(user);
-  const progress = await db.collection("progress").find({ userId: user._id }).toArray();
-  const users = isAdmin
-    ? (await db.collection("users").find({}, { projection: { passwordHash: 0, passwordSalt: 0 } }).sort({ createdAt: 1 }).toArray()).map(publicUser)
-    : [];
+  const enrollmentPromise = enrollmentList(user);
+  const progressPromise = db.collection("progress").find({ userId: user._id }).toArray();
+  const usersPromise = isAdmin
+    ? db.collection("users").find({}, { projection: { passwordHash: 0, passwordSalt: 0 } }).sort({ createdAt: 1 }).toArray()
+    : Promise.resolve([]);
+  const enrollments = await enrollmentPromise;
+  const progress = await progressPromise;
+  const users = await usersPromise;
   res.json({
     ok: true,
     user: publicUser(user),
     enrollments: enrollments,
     progress: progress.map(publicProgress),
-    lessons: lessons.map(publicLesson),
-    videos: videos.map(function (row) { return publicVideo(row, isAdmin); }),
-    users: users,
+    lessons: [],
+    videos: videoRows,
+    users: users.map(publicUser),
     courses: catalogList,
     catalog: catalogList
   });
@@ -1085,6 +1102,7 @@ app.patch("/api/courses/:id", route(async function (req, res) {
       }
     }
   );
+  clearCatalogCache();
   res.json({ ok: true });
 }));
 
@@ -1120,6 +1138,7 @@ app.post("/api/courses", route(async function (req, res) {
     createdAt: new Date(),
     updatedAt: new Date()
   });
+  clearCatalogCache();
   res.json({ ok: true, id: courseId });
 }));
 
@@ -1156,6 +1175,7 @@ app.post("/api/courses/:id/cover", express.raw({ type: ["image/jpeg", "image/png
   if (existing && existing.coverKey && existing.coverKey !== key) {
     await r2().send(new DeleteObjectCommand({ Bucket: r2Bucket, Key: existing.coverKey }));
   }
+  clearCatalogCache();
   res.json({ ok: true });
 }));
 
@@ -1197,6 +1217,7 @@ app.post("/api/courses/:id/cover/complete", route(async function (req, res) {
   if (existing && existing.coverKey && existing.coverKey !== key && r2Ready()) {
     await r2().send(new DeleteObjectCommand({ Bucket: r2Bucket, Key: existing.coverKey }));
   }
+  clearCatalogCache();
   res.json({ ok: true });
 }));
 
@@ -1214,6 +1235,7 @@ app.delete("/api/courses/:id/cover", route(async function (req, res) {
       { $unset: { coverKey: "", coverType: "", coverSize: "" }, $set: { updatedAt: new Date() } }
     );
   }
+  clearCatalogCache();
   res.json({ ok: true });
 }));
 

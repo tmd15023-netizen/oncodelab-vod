@@ -1,5 +1,5 @@
 (function () {
-  window.VodStore.ready.then(function () {
+  function paint() {
   var root = document.getElementById("app");
   var resume = window.VodStore.resumeCourse();
   var stats = window.VodStore.summary();
@@ -117,5 +117,7 @@
       "</div>" +
       '<p class="expect">회원, 수강 승인, 시청 진도와 영상 파일은 서버 저장소에 보관됩니다.</p>' +
     "</section>";
-  });
+  }
+  paint();
+  window.VodStore.ready.then(paint);
 })();

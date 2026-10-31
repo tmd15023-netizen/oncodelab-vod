@@ -284,4 +284,5 @@
   };
 
   window.VodStore.ready.then(mountAccount);
+  mountAccount();
 })();

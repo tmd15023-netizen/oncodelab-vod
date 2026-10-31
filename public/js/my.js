@@ -1,5 +1,5 @@
 (function () {
-  window.VodStore.ready.then(function () {
+  function paint() {
   var root = document.getElementById("app");
   var student = window.VodStore.getStudent();
   var stats = window.VodStore.summary();
@@ -135,5 +135,7 @@
     "</section>";
 
   window.onVodLogin = function () { location.reload(); };
-  });
+  }
+  paint();
+  window.VodStore.ready.then(paint);
 })();

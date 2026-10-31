@@ -1,15 +1,7 @@
 (function () {
-  window.VodStore.ready.then(function () {
   var root = document.getElementById("app");
-  var course = window.VodCatalog.byId(new URLSearchParams(location.search).get("id"));
+  var courseId = new URLSearchParams(location.search).get("id");
   var notice = "";
-
-  if (!course) {
-    root.innerHTML = '<div class="empty"><strong>강의를 찾을 수 없습니다</strong><p><a class="link-more" href="courses.html">전체 강의로 돌아가기</a></p></div>';
-    return;
-  }
-
-  document.title = course.title + " · 온코드랩 VOD";
 
   function statusCopy(access) {
     if (access === "guest") return "로그인하고 수강 신청을 하면, 승인 후 영상을 볼 수 있습니다.";
@@ -23,7 +15,12 @@
   }
 
   function render() {
-    course = window.VodCatalog.byId(course.id) || course;
+    var course = window.VodCatalog.byId(courseId);
+    if (!course) {
+      root.innerHTML = '<div class="empty"><strong>강의를 찾을 수 없습니다</strong><p><a class="link-more" href="courses.html">전체 강의로 돌아가기</a></p></div>';
+      return;
+    }
+    document.title = course.title + " · 온코드랩 VOD";
     var state = window.VodStore.courseState(course);
     var point = window.VodStore.resumePoint(course);
     var access = window.VodStore.accessState(course.id);
@@ -84,7 +81,7 @@
 
   root.addEventListener("click", function (event) {
     if (!event.target.closest("[data-apply]")) return;
-    window.VodStore.applyCourse(course.id).then(function (result) {
+    window.VodStore.applyCourse(courseId).then(function (result) {
       notice = result.message || "";
       render();
     });
@@ -94,6 +91,6 @@
     notice = "";
     render();
   };
-  render();
-  });
+  if (window.VodCatalog.byId(courseId)) render();
+  window.VodStore.ready.then(render);
 })();
