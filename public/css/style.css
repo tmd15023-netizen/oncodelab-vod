@@ -985,6 +985,8 @@ button.course-card {
 }
 
 .site-footer p { margin-top: 4px; color: var(--muted); font-size: 13px; }
+.footer-biz a { color: inherit; font-weight: 700; text-decoration: none; }
+.footer-biz a:hover { text-decoration: underline; }
 .footer-links { display: flex; gap: 16px; }
 .footer-links a { color: var(--muted); font-size: 14px; font-weight: 700; text-decoration: none; }
 
