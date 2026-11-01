@@ -571,6 +571,7 @@ function publicUser(user) {
     id: String(user._id),
     name: user.name,
     email: user.email,
+    phone: user.phone || "",
     role: user.role,
     createdAt: user.createdAt ? new Date(user.createdAt).getTime() : 0
   };
@@ -578,6 +579,13 @@ function publicUser(user) {
 
 function isEmail(value) {
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value);
+}
+
+function cleanPhone(value) {
+  const digits = String(value || "").replace(/\D/g, "");
+  if (!/^01[016789]\d{7,8}$/.test(digits)) return "";
+  if (digits.length === 10) return digits.slice(0, 3) + "-" + digits.slice(3, 6) + "-" + digits.slice(6);
+  return digits.slice(0, 3) + "-" + digits.slice(3, 7) + "-" + digits.slice(7);
 }
 
 async function currentUser(req) {
@@ -739,11 +747,13 @@ app.get("/api/session", route(async function (req, res) {
 app.post("/api/register", route(async function (req, res) {
   const name = String((req.body && req.body.name) || "").trim().replace(/\s+/g, " ");
   const email = String((req.body && req.body.email) || "").trim().toLowerCase();
+  const phone = cleanPhone(req.body && req.body.phone);
   const password = String((req.body && req.body.password) || "");
   if (name.length < 2) return res.status(400).json({ ok: false, message: "이름은 두 글자 이상 입력해 주세요." });
   if (name.length > 20) return res.status(400).json({ ok: false, message: "이름은 20자 안으로 입력해 주세요." });
   if (!isEmail(email) || email.length > 120) return res.status(400).json({ ok: false, message: "이메일 형식을 확인해 주세요." });
   if (email === ADMIN_EMAIL) return res.status(409).json({ ok: false, message: "이미 가입된 이메일입니다." });
+  if (!phone) return res.status(400).json({ ok: false, message: "전화번호를 올바르게 입력해 주세요. 예: 010-1234-5678" });
   if (password.length < 8) return res.status(400).json({ ok: false, message: "비밀번호는 8자 이상 입력해 주세요." });
   if (password.length > 200) return res.status(400).json({ ok: false, message: "비밀번호는 200자 안으로 입력해 주세요." });
   const salt = randomBytes(16).toString("hex");
@@ -751,6 +761,7 @@ app.post("/api/register", route(async function (req, res) {
     const result = await db.collection("users").insertOne({
       name: name,
       email: email,
+      phone: phone,
       passwordSalt: salt,
       passwordHash: await hashPassword(password, salt),
       role: "student",

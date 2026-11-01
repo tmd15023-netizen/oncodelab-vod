@@ -159,15 +159,17 @@
     return !!(user && user.role === "admin");
   }
 
-  function register(name, email, password) {
+  function register(name, email, phone, password) {
     var trimmed = String(name || "").trim().replace(/\s+/g, " ");
     var mail = normalizeEmail(email);
+    var digits = String(phone || "").replace(/\D/g, "");
     var pass = String(password || "");
     if (trimmed.length < 2) return Promise.resolve({ ok: false, message: "이름은 두 글자 이상 입력해 주세요." });
     if (trimmed.length > 20) return Promise.resolve({ ok: false, message: "이름은 20자 안으로 입력해 주세요." });
     if (!isEmail(mail)) return Promise.resolve({ ok: false, message: "이메일 형식을 확인해 주세요." });
+    if (!/^01[016789]\d{7,8}$/.test(digits)) return Promise.resolve({ ok: false, message: "전화번호를 올바르게 입력해 주세요. 예: 010-1234-5678" });
     if (pass.length < 8) return Promise.resolve({ ok: false, message: "비밀번호는 8자 이상 입력해 주세요." });
-    return api("/api/register", { method: "POST", body: { name: trimmed, email: mail, password: pass } }).then(function (data) {
+    return api("/api/register", { method: "POST", body: { name: trimmed, email: mail, phone: digits, password: pass } }).then(function (data) {
       if (!data.ok) return data;
       return refresh().then(function () { return { ok: true }; });
     });

@@ -205,7 +205,7 @@
       "</form>";
     return '<p><button type="button" class="btn" data-member-back>회원 목록</button></p>' +
       '<section class="member-card"><div class="member-head"><div><strong>' + window.VodUI.esc(user.name) + "</strong><p>" +
-      window.VodUI.esc(user.email) + " · " + memberRoleText(user, self) + " · 가입 " + window.VodUI.esc(window.VodUI.formatWhen(user.createdAt)) + "</p></div>" +
+      window.VodUI.esc(user.email) + (user.phone ? " · " + window.VodUI.esc(user.phone) : " · 전화번호 없음") + " · " + memberRoleText(user, self) + " · 가입 " + window.VodUI.esc(window.VodUI.formatWhen(user.createdAt)) + "</p></div>" +
       '<div class="member-actions">' + roleButton + deleteButton + "</div></div>" +
       "<h3>수강 내역</h3>" +
       '<ul class="user-list">' + list + "</ul>" + grant + "</section>";
@@ -226,7 +226,7 @@
     var query = memberQuery.trim().toLowerCase();
     var shown = users.filter(function (user) {
       if (!query) return true;
-      return (user.name + " " + user.email).toLowerCase().indexOf(query) !== -1;
+      return (user.name + " " + user.email + " " + (user.phone || "")).toLowerCase().indexOf(query) !== -1;
     });
     var rows = shown.map(function (user) {
       var count = window.VodStore.listEnrollments().filter(function (item) { return item.userId === user.id; }).length;
@@ -234,14 +234,15 @@
       return '<button type="button" class="member-row" data-pick-user="' + window.VodUI.esc(user.id) + '">' +
         '<strong class="member-name">' + window.VodUI.esc(user.name) + "</strong>" +
         '<span class="member-mail">' + window.VodUI.esc(user.email) + "</span>" +
-        "<span>" + memberRoleText(user, self) + "</span>" +
-        "<span>" + (user.role === "admin" ? "—" : count + "개") + "</span>" +
+        '<span class="member-phone">' + window.VodUI.esc(user.phone || "—") + "</span>" +
+        '<span class="member-role">' + memberRoleText(user, self) + "</span>" +
+        '<span class="member-count">' + (user.role === "admin" ? "—" : count + "개") + "</span>" +
         '<span class="member-chevron" aria-hidden="true">›</span></button>';
     }).join("");
     var body = rows || '<div class="empty"><strong>검색 결과가 없습니다</strong><p>이름이나 이메일로 다시 찾아 보세요.</p></div>';
     return '<section class="section"><div class="enroll-tools"><p class="enroll-count">' + shown.length + "명</p>" +
-      '<div class="search"><input type="search" data-member-query placeholder="이름, 이메일" value="' + window.VodUI.esc(memberQuery) + '" aria-label="회원 검색" /></div></div>' +
-      '<div class="member-head-row"><span>이름</span><span>이메일</span><span>구분</span><span>수강</span><span></span></div>' +
+      '<div class="search"><input type="search" data-member-query placeholder="이름, 이메일, 전화번호" value="' + window.VodUI.esc(memberQuery) + '" aria-label="회원 검색" /></div></div>' +
+      '<div class="member-head-row"><span>이름</span><span>이메일</span><span>전화번호</span><span>구분</span><span>수강</span><span></span></div>' +
       '<div class="member-list">' + body + "</div></section>";
   }
 

@@ -154,10 +154,11 @@
           "</div>" +
           '<div id="auth-signup" hidden>' +
             '<h2 id="signup-title">회원가입</h2>' +
-            '<p class="lede">이름, 이메일, 비밀번호로 가입합니다. 강의별 수강 신청이 승인되면 영상을 볼 수 있습니다.</p>' +
+            '<p class="lede">이름, 이메일, 전화번호, 비밀번호로 가입합니다. 강의별 수강 신청이 승인되면 영상을 볼 수 있습니다.</p>' +
             '<form id="signup-form">' +
               '<label class="field">이름<input name="name" maxlength="20" required autocomplete="name" placeholder="이름을 입력하세요" /></label>' +
               '<label class="field">이메일<input name="email" type="email" required autocomplete="email" placeholder="email@example.com" /></label>' +
+              '<label class="field">전화번호<input name="phone" type="tel" required autocomplete="tel" inputmode="tel" placeholder="010-0000-0000" /></label>' +
               '<label class="field">비밀번호<input name="password" type="password" minlength="8" required autocomplete="new-password" placeholder="8자 이상" /></label>' +
               '<p class="form-error" id="signup-error" hidden></p>' +
               '<button class="btn primary" type="submit">회원가입</button>' +
@@ -183,7 +184,7 @@
     document.getElementById("signup-form").addEventListener("submit", function (event) {
       event.preventDefault();
       var form = event.currentTarget;
-      window.VodStore.register(form.name.value, form.email.value, form.password.value).then(function (result) {
+      window.VodStore.register(form.name.value, form.email.value, form.phone.value, form.password.value).then(function (result) {
         if (!result.ok) {
           showAuthError("signup-error", result.message);
           return;
