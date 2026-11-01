@@ -316,7 +316,15 @@
     { id: "forest", name: "숲" },
     { id: "amber", name: "앰버" },
     { id: "plum", name: "자두" },
-    { id: "slate", name: "흑연" }
+    { id: "slate", name: "흑연" },
+    { id: "rose", name: "장미" },
+    { id: "sky", name: "하늘" },
+    { id: "mint", name: "민트" },
+    { id: "orange", name: "주황" },
+    { id: "ruby", name: "루비" },
+    { id: "olive", name: "올리브" },
+    { id: "sand", name: "모래" },
+    { id: "night", name: "밤" }
   ];
 
   function tonePicker(selected) {

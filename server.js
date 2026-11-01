@@ -182,7 +182,7 @@ function clipLines(value, count, max) {
 const COVER_EXT = { "image/jpeg": "jpg", "image/png": "png", "image/webp": "webp" };
 const COVER_BYTES = 5 * 1024 * 1024;
 
-const COURSE_TONES = ["violet", "blue", "teal", "coral", "ink", "wine", "forest", "amber", "plum", "slate"];
+const COURSE_TONES = ["violet", "blue", "teal", "coral", "ink", "wine", "forest", "amber", "plum", "slate", "rose", "sky", "mint", "orange", "ruby", "olive", "sand", "night"];
 
 function cleanTone(value) {
   const tone = String(value || "");

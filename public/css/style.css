@@ -532,9 +532,20 @@ button.course-card {
 .tone-amber { background: linear-gradient(145deg, #451a03, #b45309 48%, #fcd34d); }
 .tone-plum { background: linear-gradient(145deg, #3b0764, #a21caf 52%, #f0abfc); }
 .tone-slate { background: linear-gradient(145deg, #64748b, #94a3b8 48%, #dbe3ec); color: #1e293b; }
+.tone-rose { background: linear-gradient(145deg, #831843, #db2777 52%, #fbcfe8); }
+.tone-sky { background: linear-gradient(145deg, #0c4a6e, #0284c7 50%, #7dd3fc); }
+.tone-mint { background: linear-gradient(145deg, #064e3b, #059669 48%, #a7f3d0); }
+.tone-orange { background: linear-gradient(145deg, #7c2d12, #ea580c 46%, #fdba74); }
+.tone-ruby { background: linear-gradient(145deg, #450a0a, #b91c1c 48%, #fca5a5); }
+.tone-olive { background: linear-gradient(145deg, #365314, #4d7c0f 50%, #d9f99d); }
+.tone-sand { background: linear-gradient(145deg, #a8a29e, #d6d3d1 48%, #fafaf9); color: #292524; }
+.tone-night { background: linear-gradient(145deg, #09090b, #27272a 55%, #71717a); }
 .tone-swatch.tone-slate { color: #1e293b; text-shadow: none; }
+.tone-swatch.tone-sand { color: #292524; text-shadow: none; }
 .thumb.tone-slate,
 .art-card.tone-slate { color: #1e293b; }
+.thumb.tone-sand,
+.art-card.tone-sand { color: #292524; }
 
 .tone-field { display: grid; gap: 8px; }
 .tone-picker { display: flex; flex-wrap: wrap; gap: 8px; }
