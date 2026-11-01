@@ -1153,7 +1153,7 @@ button.course-card {
 .member-head-row,
 .member-row {
   display: grid;
-  grid-template-columns: minmax(0, 0.7fr) minmax(0, 1.15fr) 132px 108px 56px 16px;
+  grid-template-columns: minmax(0, 0.7fr) minmax(0, 1.1fr) 124px 96px minmax(108px, 128px) 48px 16px;
   gap: 8px 12px;
   align-items: center;
 }
@@ -1185,6 +1185,7 @@ button.course-card {
   white-space: nowrap;
 }
 .member-name { font-size: 14px; }
+.member-end.is-past { color: #b45309; font-weight: 800; }
 .member-chevron { color: var(--muted); font-size: 18px; font-weight: 700; }
 .member-head,
 .member-actions { display: flex; justify-content: space-between; gap: 8px; align-items: center; flex-wrap: wrap; }
@@ -1415,6 +1416,7 @@ button.course-card {
     grid-template-columns: minmax(0, 1fr) auto auto 16px;
     grid-template-areas:
       "name role count chev"
+      "end end end end"
       "mail mail mail mail"
       "phone phone phone phone";
   }
@@ -1422,6 +1424,7 @@ button.course-card {
   .member-mail { grid-area: mail; }
   .member-phone { grid-area: phone; }
   .member-role { grid-area: role; }
+  .member-end { grid-area: end; }
   .member-count { grid-area: count; }
   .member-chevron { grid-area: chev; }
   .enroll-row.enroll-edit {

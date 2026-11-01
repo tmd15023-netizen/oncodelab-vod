@@ -176,6 +176,22 @@
     return "수강생";
   }
 
+  function memberEndText(user) {
+    if (user.role === "admin") return { text: "—", past: false };
+    var ends = [];
+    var unlimited = false;
+    window.VodStore.listEnrollments().forEach(function (item) {
+      if (item.userId !== user.id || item.status !== "approved") return;
+      if (!item.accessEnd) unlimited = true;
+      else ends.push(item.accessEnd);
+    });
+    if (!ends.length) return { text: unlimited ? "제한 없음" : "—", past: false };
+    ends.sort(function (a, b) { return a - b; });
+    var text = dateInputValue(ends[0]).replace(/-/g, ".");
+    if (ends.length > 1) text += " 외 " + (ends.length - 1);
+    return { text: text, past: ends[0] < Date.now() };
+  }
+
   function memberDetail(user) {
     var me = window.VodStore.getStudent();
     var rows = window.VodStore.listEnrollments().filter(function (item) { return item.userId === user.id; });
@@ -230,19 +246,21 @@
     });
     var rows = shown.map(function (user) {
       var count = window.VodStore.listEnrollments().filter(function (item) { return item.userId === user.id; }).length;
+      var end = memberEndText(user);
       var self = me && user.id === me.id;
       return '<button type="button" class="member-row" data-pick-user="' + window.VodUI.esc(user.id) + '">' +
         '<strong class="member-name">' + window.VodUI.esc(user.name) + "</strong>" +
         '<span class="member-mail">' + window.VodUI.esc(user.email) + "</span>" +
         '<span class="member-phone">' + window.VodUI.esc(user.phone || "—") + "</span>" +
         '<span class="member-role">' + memberRoleText(user, self) + "</span>" +
+        '<span class="member-end' + (end.past ? " is-past" : "") + '">' + window.VodUI.esc(end.text) + "</span>" +
         '<span class="member-count">' + (user.role === "admin" ? "—" : count + "개") + "</span>" +
         '<span class="member-chevron" aria-hidden="true">›</span></button>';
     }).join("");
     var body = rows || '<div class="empty"><strong>검색 결과가 없습니다</strong><p>이름이나 이메일로 다시 찾아 보세요.</p></div>';
     return '<section class="section"><div class="enroll-tools"><p class="enroll-count">' + shown.length + "명</p>" +
       '<div class="search"><input type="search" data-member-query placeholder="이름, 이메일, 전화번호" value="' + window.VodUI.esc(memberQuery) + '" aria-label="회원 검색" /></div></div>' +
-      '<div class="member-head-row"><span>이름</span><span>이메일</span><span>전화번호</span><span>구분</span><span>수강</span><span></span></div>' +
+      '<div class="member-head-row"><span>이름</span><span>이메일</span><span>전화번호</span><span>구분</span><span>종료일</span><span>수강</span><span></span></div>' +
       '<div class="member-list">' + body + "</div></section>";
   }
 
