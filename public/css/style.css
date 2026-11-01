@@ -1013,7 +1013,7 @@ button.course-card {
 .site-footer p { margin-top: 4px; color: var(--muted); font-size: 13px; }
 .footer-biz a { color: inherit; font-weight: 700; text-decoration: none; }
 .footer-biz a:hover { text-decoration: underline; }
-.footer-links { display: flex; gap: 16px; }
+.footer-links { display: flex; flex-wrap: wrap; gap: 12px 16px; justify-content: flex-end; }
 .footer-links a { color: var(--muted); font-size: 14px; font-weight: 700; text-decoration: none; }
 
 .noscript { padding: 24px 0; }
