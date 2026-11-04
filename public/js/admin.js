@@ -384,14 +384,26 @@
       var removeCover = course.coverUrl
         ? '<button type="button" class="btn small" data-remove-cover="' + window.VodUI.esc(course.id) + '"' + (busy ? " disabled" : "") + ">이미지 삭제</button>"
         : "";
-      var lessonBody = (course.chapters || []).map(function (chapter) {
+      var chapters = course.chapters || [];
+      var lessonBody = chapters.map(function (chapter, chapterIndex) {
         var rows = (chapter.lessons || []).map(function (lesson, index) {
           var meta = window.VodStore.videoMeta(lesson.id);
           var info = meta
             ? window.VodUI.esc(meta.name) + " · " + bytes(meta.size) + (meta.seconds ? " · " + window.VodUI.clock(meta.seconds) : "")
             : "등록된 영상이 없습니다. 승인된 수강생에게는 샘플 영상이 재생됩니다.";
           var removeVideo = meta ? '<button type="button" class="btn small" data-remove-video="' + window.VodUI.esc(lesson.id) + '">영상 삭제</button>' : "";
-          return '<div class="lesson-admin" id="lesson-row-' + window.VodUI.esc(lesson.id) + '"><div><strong>' + String(index + 1).padStart(2, "0") + ". " + window.VodUI.esc(lesson.title) + "</strong><p>" + info + "</p></div>" +
+          var first = chapterIndex === 0 && index === 0;
+          var lastChapter = chapters[chapters.length - 1];
+          var last = chapter === lastChapter && index === (chapter.lessons || []).length - 1;
+          return '<div class="lesson-admin" id="lesson-row-' + window.VodUI.esc(lesson.id) + '">' +
+            '<div class="lesson-edit">' +
+              '<span class="lesson-index">' + String(index + 1).padStart(2, "0") + "</span>" +
+              '<input type="text" maxlength="60" data-lesson-title="' + window.VodUI.esc(lesson.id) + '" value="' + window.VodUI.esc(lesson.title) + '" aria-label="회차 이름" />' +
+              '<button type="button" class="btn small primary" data-rename-lesson="' + window.VodUI.esc(lesson.id) + '"' + (busy ? " disabled" : "") + ">이름 저장</button>" +
+              '<button type="button" class="btn small" data-move-lesson="' + window.VodUI.esc(lesson.id) + '" data-move="up"' + (busy || first ? " disabled" : "") + ">위로</button>" +
+              '<button type="button" class="btn small" data-move-lesson="' + window.VodUI.esc(lesson.id) + '" data-move="down"' + (busy || last ? " disabled" : "") + ">아래로</button>" +
+            "</div>" +
+            "<p>" + info + "</p>" +
             '<div class="file-line"><input type="file" data-file-for="' + window.VodUI.esc(lesson.id) + '" accept="video/*" />' +
             '<button type="button" class="btn small primary" data-upload="' + window.VodUI.esc(lesson.id) + '"' + (busy ? " disabled" : "") + ">업로드</button>" +
             removeVideo +
@@ -617,6 +629,40 @@
         if (result.ok) selectedCourseId = "";
         setStatus(result.ok ? "강의를 삭제했습니다." : result.message, !result.ok);
         render();
+      });
+      return;
+    }
+    var renameLesson = event.target.closest("[data-rename-lesson]");
+    if (renameLesson) {
+      if (busy) return;
+      var renameId = renameLesson.getAttribute("data-rename-lesson");
+      var titleInput = root.querySelector('[data-lesson-title="' + renameId + '"]');
+      var nextTitle = titleInput ? titleInput.value.trim() : "";
+      if (nextTitle.length < 2) {
+        setStatus("회차 제목을 두 글자 이상 입력해 주세요.", true);
+        render();
+        focusStatus();
+        return;
+      }
+      busy = true;
+      window.VodStore.renameLesson(renameId, nextTitle).then(function (result) {
+        busy = false;
+        setStatus(result.ok ? "회차 이름을 바꿨습니다." : result.message, !result.ok);
+        render();
+        if (result.ok) focusLesson(renameId);
+      });
+      return;
+    }
+    var moveLesson = event.target.closest("[data-move-lesson]");
+    if (moveLesson) {
+      if (busy) return;
+      var moveId = moveLesson.getAttribute("data-move-lesson");
+      busy = true;
+      window.VodStore.moveLesson(moveId, moveLesson.getAttribute("data-move")).then(function (result) {
+        busy = false;
+        setStatus(result.ok ? "회차 순서를 바꿨습니다." : result.message, !result.ok);
+        render();
+        if (result.ok) focusLesson(moveId);
       });
       return;
     }

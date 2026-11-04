@@ -259,12 +259,30 @@ async function ensureCourseCatalog(database) {
   await meta.updateOne({ _id: "catalog" }, { $set: { seeded: true, seededAt: new Date() } }, { upsert: true });
 }
 
-async function coverUrlFor(key) {
+const COVER_URL_SECONDS = 60 * 60 * 24 * 7;
+const COVER_URL_RENEW_MS = 60 * 60 * 24 * 1000;
+
+/* 표지 주소는 서명이 바뀔 때마다 브라우저가 같은 그림을 다시 받습니다. 만료 전에는 저장해 둔 주소를 그대로 씁니다. */
+async function coverUrlFor(row) {
+  const key = row && row.coverKey;
   if (!key || !r2Ready()) return "";
-  return getSignedUrl(r2(), new GetObjectCommand({
+  const now = Date.now();
+  if (row.coverSignedUrl && row.coverSignedKey === key && row.coverSignedUntil > now + COVER_URL_RENEW_MS) {
+    return row.coverSignedUrl;
+  }
+  const url = await getSignedUrl(r2(), new GetObjectCommand({
     Bucket: r2Bucket,
-    Key: key
-  }), { expiresIn: 60 * 60 * 4 });
+    Key: key,
+    ResponseCacheControl: "public, max-age=86400"
+  }), { expiresIn: COVER_URL_SECONDS });
+  await db.collection("courses").updateOne({ courseId: row.courseId }, {
+    $set: {
+      coverSignedUrl: url,
+      coverSignedUntil: now + COVER_URL_SECONDS * 1000,
+      coverSignedKey: key
+    }
+  });
+  return url;
 }
 
 function publicChapter(chapter) {
@@ -282,6 +300,7 @@ function publicChapter(chapter) {
 }
 
 let catalogSnapshot = { at: 0, list: null };
+const CATALOG_CACHE_MS = 60 * 1000;
 
 function clearCatalogCache() {
   catalogSnapshot = { at: 0, list: null };
@@ -289,7 +308,7 @@ function clearCatalogCache() {
 
 async function publicCatalog() {
   const now = Date.now();
-  if (catalogSnapshot.list && now - catalogSnapshot.at < 20000) return catalogSnapshot.list;
+  if (catalogSnapshot.list && now - catalogSnapshot.at < CATALOG_CACHE_MS) return catalogSnapshot.list;
   const rows = await db.collection("courses").find({}).sort({ createdAt: 1, title: 1 }).toArray();
   const list = await Promise.all(rows.map(async function (row) {
     return {
@@ -303,7 +322,7 @@ async function publicCatalog() {
       audience: row.audience || "",
       goals: Array.isArray(row.goals) ? row.goals : [],
       thumbLines: Array.isArray(row.thumbLines) && row.thumbLines.length ? row.thumbLines : [row.title || "강의"],
-      coverUrl: await coverUrlFor(row.coverKey),
+      coverUrl: await coverUrlFor(row),
       chapters: (row.chapters || []).map(publicChapter)
     };
   }));
@@ -338,6 +357,101 @@ async function pushLesson(courseId, chapterTitle, lesson) {
   );
   clearCatalogCache();
   return true;
+}
+
+function lessonTitle(value) {
+  return String(value || "").trim().replace(/\s+/g, " ");
+}
+
+async function courseWithLesson(lessonId) {
+  if (!isId(lessonId)) return null;
+  return db.collection("courses").findOne({ "chapters.lessons.id": lessonId });
+}
+
+async function renameLesson(lessonId, title) {
+  const course = await courseWithLesson(lessonId);
+  if (!course) return false;
+  const chapters = (course.chapters || []).map(function (chapter) {
+    return {
+      title: chapter.title,
+      lessons: (chapter.lessons || []).map(function (lesson) {
+        if (lesson.id !== lessonId) return lesson;
+        return Object.assign({}, lesson, { title: title });
+      })
+    };
+  });
+  await db.collection("courses").updateOne(
+    { _id: course._id },
+    { $set: { chapters: chapters, updatedAt: new Date() } }
+  );
+  await db.collection("lessons").updateOne({ lessonId: lessonId }, { $set: { title: title } });
+  clearCatalogCache();
+  return true;
+}
+
+function moveLessonInChapters(chapters, lessonId, direction) {
+  const next = (chapters || []).map(function (chapter) {
+    return {
+      title: chapter.title,
+      lessons: (chapter.lessons || []).slice()
+    };
+  });
+  let chapterIndex = -1;
+  let lessonIndex = -1;
+  next.forEach(function (chapter, ci) {
+    chapter.lessons.forEach(function (lesson, li) {
+      if (lesson.id === lessonId) {
+        chapterIndex = ci;
+        lessonIndex = li;
+      }
+    });
+  });
+  if (chapterIndex < 0) return "";
+  const chapter = next[chapterIndex];
+  if (direction === "up") {
+    if (lessonIndex > 0) {
+      const previous = chapter.lessons[lessonIndex - 1];
+      chapter.lessons[lessonIndex - 1] = chapter.lessons[lessonIndex];
+      chapter.lessons[lessonIndex] = previous;
+      return { chapters: next, chapterTitle: chapter.title };
+    }
+    if (chapterIndex === 0) return "first";
+    const lesson = chapter.lessons.splice(lessonIndex, 1)[0];
+    const target = next[chapterIndex - 1];
+    target.lessons.push(lesson);
+    return { chapters: next, chapterTitle: target.title };
+  }
+  if (direction === "down") {
+    if (lessonIndex < chapter.lessons.length - 1) {
+      const following = chapter.lessons[lessonIndex + 1];
+      chapter.lessons[lessonIndex + 1] = chapter.lessons[lessonIndex];
+      chapter.lessons[lessonIndex] = following;
+      return { chapters: next, chapterTitle: chapter.title };
+    }
+    if (chapterIndex === next.length - 1) return "last";
+    const lesson = chapter.lessons.splice(lessonIndex, 1)[0];
+    const target = next[chapterIndex + 1];
+    target.lessons.unshift(lesson);
+    return { chapters: next, chapterTitle: target.title };
+  }
+  return "";
+}
+
+async function moveLesson(lessonId, direction) {
+  const course = await courseWithLesson(lessonId);
+  if (!course) return "";
+  const moved = moveLessonInChapters(course.chapters, lessonId, direction);
+  if (!moved || moved === "first" || moved === "last") return moved;
+  await db.collection("courses").updateOne(
+    { _id: course._id },
+    { $set: { chapters: moved.chapters, updatedAt: new Date() } }
+  );
+  await db.collection("lessons").updateOne(
+    { lessonId: lessonId },
+    { $set: { chapterTitle: moved.chapterTitle } }
+  );
+  clearCatalogCache();
+  return "ok";
 }
 
 async function detachLesson(lessonId) {
@@ -700,15 +814,23 @@ app.get("/api/health", route(async function (req, res) {
   res.json({ ok: true, db: db.databaseName });
 }));
 
+app.get("/api/catalog", route(async function (req, res) {
+  const list = await publicCatalog();
+  res.setHeader("Cache-Control", "private, max-age=60");
+  res.json({ ok: true, catalog: list });
+}));
+
 app.get("/api/session", route(async function (req, res) {
+  res.setHeader("Cache-Control", "private, no-store");
+  const scopeAdmin = req.query.scope === "admin";
   const userPromise = currentUser(req);
-  const videosPromise = db.collection("videos").find({}, { projection: { key: 0 } }).toArray();
-  const catalogPromise = publicCatalog();
+  const videosPromise = db.collection("videos").find({}, {
+    projection: { lessonId: 1, courseId: 1, seconds: 1, fileName: 1, size: 1, contentType: 1, updatedAt: 1 }
+  }).toArray();
   const user = await userPromise;
   const isAdmin = !!(user && user.role === "admin");
   const videos = await videosPromise;
-  const catalogList = await catalogPromise;
-  const videoRows = videos.map(function (row) { return publicVideo(row, isAdmin); });
+  const videoRows = videos.map(function (row) { return publicVideo(row, isAdmin && scopeAdmin); });
   if (!user) {
     res.json({
       ok: true,
@@ -717,15 +839,17 @@ app.get("/api/session", route(async function (req, res) {
       progress: [],
       users: [],
       lessons: [],
-      videos: videoRows,
-      courses: catalogList,
-      catalog: catalogList
+      videos: videoRows
     });
     return;
   }
-  const enrollmentPromise = enrollmentList(user);
+  const enrollmentPromise = isAdmin && scopeAdmin
+    ? enrollmentList(user)
+    : db.collection("enrollments").find({ userId: user._id }).toArray().then(function (rows) {
+      return rows.map(publicEnrollment);
+    });
   const progressPromise = db.collection("progress").find({ userId: user._id }).toArray();
-  const usersPromise = isAdmin
+  const usersPromise = isAdmin && scopeAdmin
     ? db.collection("users").find({}, { projection: { passwordHash: 0, passwordSalt: 0 } }).sort({ createdAt: 1 }).toArray()
     : Promise.resolve([]);
   const enrollments = await enrollmentPromise;
@@ -738,9 +862,7 @@ app.get("/api/session", route(async function (req, res) {
     progress: progress.map(publicProgress),
     lessons: [],
     videos: videoRows,
-    users: users.map(publicUser),
-    courses: catalogList,
-    catalog: catalogList
+    users: users.map(publicUser)
   });
 }));
 
@@ -991,6 +1113,33 @@ app.post("/api/lessons/import", route(async function (req, res) {
   res.json({ ok: true, imported: imported });
 }));
 
+app.patch("/api/lessons/:lessonId", route(async function (req, res) {
+  if (!await requireAdminUser(req, res, "관리자만 회차 이름을 바꿀 수 있습니다.")) return;
+  const lessonId = String(req.params.lessonId || "");
+  const title = lessonTitle(req.body && req.body.title);
+  if (title.length < 2 || title.length > 60) {
+    return res.status(400).json({ ok: false, message: "회차 제목은 2자에서 60자 사이로 입력해 주세요." });
+  }
+  if (!await renameLesson(lessonId, title)) {
+    return res.status(404).json({ ok: false, message: "회차를 찾을 수 없습니다." });
+  }
+  res.json({ ok: true });
+}));
+
+app.post("/api/lessons/:lessonId/move", route(async function (req, res) {
+  if (!await requireAdminUser(req, res, "관리자만 회차 순서를 바꿀 수 있습니다.")) return;
+  const lessonId = String(req.params.lessonId || "");
+  const direction = String((req.body && req.body.direction) || "");
+  if (direction !== "up" && direction !== "down") {
+    return res.status(400).json({ ok: false, message: "이동 방향을 확인해 주세요." });
+  }
+  const moved = await moveLesson(lessonId, direction);
+  if (!moved) return res.status(404).json({ ok: false, message: "회차를 찾을 수 없습니다." });
+  if (moved === "first") return res.status(400).json({ ok: false, message: "이미 맨 앞 회차입니다." });
+  if (moved === "last") return res.status(400).json({ ok: false, message: "이미 맨 뒤 회차입니다." });
+  res.json({ ok: true });
+}));
+
 app.delete("/api/lessons/:lessonId", route(async function (req, res) {
   if (!await requireAdminUser(req, res, "관리자만 회차를 삭제할 수 있습니다.")) return;
   const lessonId = String(req.params.lessonId || "");
@@ -1185,7 +1334,10 @@ app.post("/api/courses/:id/cover", express.raw({ type: ["image/jpeg", "image/png
   const existing = await db.collection("courses").findOne({ courseId: courseId });
   await db.collection("courses").updateOne(
     { courseId: courseId },
-    { $set: { coverKey: key, coverType: contentType, coverSize: body.length, updatedAt: new Date() } }
+    {
+      $set: { coverKey: key, coverType: contentType, coverSize: body.length, updatedAt: new Date() },
+      $unset: { coverSignedUrl: "", coverSignedUntil: "", coverSignedKey: "" }
+    }
   );
   if (existing && existing.coverKey && existing.coverKey !== key) {
     await r2().send(new DeleteObjectCommand({ Bucket: r2Bucket, Key: existing.coverKey }));
@@ -1227,7 +1379,10 @@ app.post("/api/courses/:id/cover/complete", route(async function (req, res) {
   const existing = await db.collection("courses").findOne({ courseId: courseId });
   await db.collection("courses").updateOne(
     { courseId: courseId },
-    { $set: { coverKey: key, coverType: contentType, coverSize: size, updatedAt: new Date() } }
+    {
+      $set: { coverKey: key, coverType: contentType, coverSize: size, updatedAt: new Date() },
+      $unset: { coverSignedUrl: "", coverSignedUntil: "", coverSignedKey: "" }
+    }
   );
   if (existing && existing.coverKey && existing.coverKey !== key && r2Ready()) {
     await r2().send(new DeleteObjectCommand({ Bucket: r2Bucket, Key: existing.coverKey }));
@@ -1247,14 +1402,28 @@ app.delete("/api/courses/:id/cover", route(async function (req, res) {
   if (existing) {
     await db.collection("courses").updateOne(
       { courseId: courseId },
-      { $unset: { coverKey: "", coverType: "", coverSize: "" }, $set: { updatedAt: new Date() } }
+      {
+        $unset: { coverKey: "", coverType: "", coverSize: "", coverSignedUrl: "", coverSignedUntil: "", coverSignedKey: "" },
+        $set: { updatedAt: new Date() }
+      }
     );
   }
   clearCatalogCache();
   res.json({ ok: true });
 }));
 
-app.use(express.static(path.join(__dirname, "public")));
+app.use(express.static(path.join(__dirname, "public"), {
+  etag: true,
+  setHeaders: function (res, filePath) {
+    if (filePath.endsWith(".html")) {
+      res.setHeader("Cache-Control", "no-cache");
+      return;
+    }
+    if (/\.(?:png|jpe?g|webp|gif|svg|ico|woff2)$/.test(filePath)) {
+      res.setHeader("Cache-Control", "public, max-age=86400");
+    }
+  }
+}));
 
 app.use(function (error, req, res, next) {
   if (res.headersSent) return next(error);

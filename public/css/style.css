@@ -1321,6 +1321,28 @@ button.course-card {
   border-top: 1px solid var(--line);
 }
 
+.lesson-edit {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+}
+.lesson-index {
+  min-width: 28px;
+  font-size: 14px;
+  font-weight: 800;
+}
+.lesson-edit input {
+  flex: 1 1 220px;
+  min-width: 160px;
+  height: 40px;
+  padding: 0 12px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: #fff;
+  font: inherit;
+  font-weight: 600;
+}
 .lesson-admin p,
 .enroll-row p,
 .user-list { color: var(--muted); font-size: 13px; }

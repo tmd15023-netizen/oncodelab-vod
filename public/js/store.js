@@ -38,15 +38,41 @@
     }
   }
 
+  function copyCourse(course) {
+    var copy = {};
+    Object.keys(course).forEach(function (key) {
+      copy[key] = course[key];
+    });
+    if (course.goals) copy.goals = course.goals.slice();
+    if (course.thumbLines) copy.thumbLines = course.thumbLines.slice();
+    copy.chapters = (course.chapters || []).map(function (chapter) {
+      return {
+        title: chapter.title,
+        lessons: (chapter.lessons || []).map(function (lesson) {
+          var item = {};
+          Object.keys(lesson).forEach(function (key) {
+            item[key] = lesson[key];
+          });
+          return item;
+        })
+      };
+    });
+    return copy;
+  }
+
+  function copyCourses(list) {
+    return (list || []).map(copyCourse);
+  }
+
   function ensureBase() {
     if (baseCourses || !window.VodCatalog) return;
-    baseCourses = JSON.parse(JSON.stringify(window.VodCatalog.courses));
+    baseCourses = copyCourses(window.VodCatalog.courses);
   }
 
   function applyLibrary() {
     ensureBase();
     if (!baseCourses || !window.VodCatalog) return;
-    var courses = catalogReady ? JSON.parse(JSON.stringify(catalogCache)) : JSON.parse(JSON.stringify(baseCourses));
+    var courses = copyCourses(catalogReady ? catalogCache : baseCourses);
     if (!catalogReady) lessonCache.forEach(function (item) {
       var course = null;
       courses.forEach(function (entry) {
@@ -137,15 +163,33 @@
     });
   }
 
-  function refresh() {
-    return api("/api/session").then(function (data) {
-      applySession(data && data.ok ? data : {});
+  function fetchCatalog(fresh) {
+    var settings = { credentials: "same-origin" };
+    if (fresh) settings.cache = "reload";
+    return fetch("/api/catalog", settings).then(function (response) {
+      return response.json().catch(function () {
+        return { ok: false, message: "서버에 연결하지 못했습니다. 서버 주소로 페이지를 열어 주세요." };
+      });
+    }).catch(function () {
+      return { ok: false, message: "서버에 연결하지 못했습니다. 서버 주소로 페이지를 열어 주세요." };
+    });
+  }
+
+  function refresh(fresh) {
+    var sessionPath = "/api/session";
+    if (/(^|\/)admin\.html$/.test(location.pathname)) sessionPath += "?scope=admin";
+    return Promise.all([api(sessionPath), fetchCatalog(fresh)]).then(function (parts) {
+      var data = parts[0] && parts[0].ok ? parts[0] : {};
+      var catalog = parts[1];
+      if (catalog && catalog.ok && Array.isArray(catalog.catalog)) data.catalog = catalog.catalog;
+      else if (catalogCache.length) data.catalog = catalogCache.slice();
+      applySession(data);
       var legacy = requireAdmin() ? legacyLessons() : [];
       if (!legacy.length) return data;
       return api("/api/lessons/import", { method: "POST", body: { lessons: legacy } }).then(function (result) {
         if (!result.ok) return data;
         forgetLegacy();
-        return refresh();
+        return refresh(true);
       });
     });
   }
@@ -560,7 +604,7 @@
       }
     }).then(function (created) {
       if (!created.ok) return created;
-      return refresh().then(function () {
+      return refresh(true).then(function () {
         applyLibrary();
         return { ok: true, id: created.id };
       });
@@ -582,7 +626,7 @@
       }
     }).then(function (result) {
       if (!result.ok) return result;
-      return refresh().then(function () {
+      return refresh(true).then(function () {
         applyLibrary();
         return { ok: true, id: result.id };
       });
@@ -593,7 +637,7 @@
     if (!requireAdmin()) return Promise.resolve({ ok: false, message: "관리자만 강의를 삭제할 수 있습니다." });
     return api("/api/courses/" + encodeURIComponent(courseId), { method: "DELETE" }).then(function (result) {
       if (!result.ok) return result;
-      return refresh().then(function () {
+      return refresh(true).then(function () {
         applyLibrary();
         return { ok: true };
       });
@@ -615,7 +659,7 @@
       }
     }).then(function (result) {
       if (!result.ok) return result;
-      return refresh().then(function () {
+      return refresh(true).then(function () {
         applyLibrary();
         return { ok: true };
       });
@@ -632,29 +676,69 @@
     return "";
   }
 
+  function shrinkCover(file) {
+    if (!imageType(file) || !window.URL || !document.createElement) return Promise.resolve(file);
+    return new Promise(function (resolve) {
+      var url = URL.createObjectURL(file);
+      var image = new Image();
+      image.onload = function () {
+        var maxEdge = 1200;
+        var longest = Math.max(image.width || 1, image.height || 1);
+        var scale = Math.min(1, maxEdge / longest);
+        var width = Math.max(1, Math.round((image.width || 1) * scale));
+        var height = Math.max(1, Math.round((image.height || 1) * scale));
+        var canvas = document.createElement("canvas");
+        canvas.width = width;
+        canvas.height = height;
+        var context = canvas.getContext("2d");
+        if (!context) {
+          URL.revokeObjectURL(url);
+          resolve(file);
+          return;
+        }
+        context.drawImage(image, 0, 0, width, height);
+        URL.revokeObjectURL(url);
+        canvas.toBlob(function (blob) {
+          if (!blob || blob.size >= file.size) {
+            resolve(file);
+            return;
+          }
+          resolve(new File([blob], "cover.webp", { type: "image/webp" }));
+        }, "image/webp", 0.82);
+      };
+      image.onerror = function () {
+        URL.revokeObjectURL(url);
+        resolve(file);
+      };
+      image.src = url;
+    });
+  }
+
   function saveCourseCover(courseId, file) {
     if (!requireAdmin()) return Promise.resolve({ ok: false, message: "관리자만 이미지를 올릴 수 있습니다." });
     if (!file) return Promise.resolve({ ok: false, message: "이미지 파일을 선택해 주세요." });
-    var contentType = imageType(file);
+    return shrinkCover(file).then(function (prepared) {
+    var contentType = imageType(prepared);
     if (!contentType) return Promise.resolve({ ok: false, message: "JPG, PNG, WEBP 이미지만 올릴 수 있습니다." });
-    if (!file.size || file.size > 5 * 1024 * 1024) return Promise.resolve({ ok: false, message: "이미지는 5MB 이하로 올려 주세요." });
+    if (!prepared.size || prepared.size > 5 * 1024 * 1024) return Promise.resolve({ ok: false, message: "이미지는 5MB 이하로 올려 주세요." });
     return fetch("/api/courses/" + encodeURIComponent(courseId) + "/cover", {
       method: "POST",
       credentials: "same-origin",
       headers: { "Content-Type": contentType },
-      body: file
+      body: prepared
     }).then(function (response) {
       return response.json().catch(function () {
         return { ok: false, message: "이미지를 저장하지 못했습니다." };
       });
     }).then(function (result) {
       if (!result.ok) return result;
-      return refresh().then(function () {
+      return refresh(true).then(function () {
         applyLibrary();
         return { ok: true };
       });
     }).catch(function () {
       return { ok: false, message: "이미지를 저장하지 못했습니다." };
+    });
     });
   }
 
@@ -662,7 +746,35 @@
     if (!requireAdmin()) return Promise.resolve({ ok: false, message: "관리자만 이미지를 지울 수 있습니다." });
     return api("/api/courses/" + encodeURIComponent(courseId) + "/cover", { method: "DELETE" }).then(function (result) {
       if (!result.ok) return result;
-      return refresh().then(function () {
+      return refresh(true).then(function () {
+        applyLibrary();
+        return { ok: true };
+      });
+    });
+  }
+
+  function renameLesson(lessonId, title) {
+    if (!requireAdmin()) return Promise.resolve({ ok: false, message: "관리자만 회차 이름을 바꿀 수 있습니다." });
+    return api("/api/lessons/" + encodeURIComponent(lessonId), {
+      method: "PATCH",
+      body: { title: title }
+    }).then(function (result) {
+      if (!result.ok) return result;
+      return refresh(true).then(function () {
+        applyLibrary();
+        return { ok: true };
+      });
+    });
+  }
+
+  function moveLesson(lessonId, direction) {
+    if (!requireAdmin()) return Promise.resolve({ ok: false, message: "관리자만 회차 순서를 바꿀 수 있습니다." });
+    return api("/api/lessons/" + encodeURIComponent(lessonId) + "/move", {
+      method: "POST",
+      body: { direction: direction }
+    }).then(function (result) {
+      if (!result.ok) return result;
+      return refresh(true).then(function () {
         applyLibrary();
         return { ok: true };
       });
@@ -674,7 +786,7 @@
     return api("/api/lessons/" + encodeURIComponent(lessonId), { method: "DELETE" }).then(function (result) {
       if (!result.ok) return result;
       delete videoCache[lessonId];
-      return refresh().then(function () {
+      return refresh(true).then(function () {
         applyLibrary();
         return { ok: true };
       });
@@ -718,6 +830,8 @@
     saveVideo: saveVideo,
     removeVideo: removeVideo,
     addLesson: addLesson,
+    renameLesson: renameLesson,
+    moveLesson: moveLesson,
     removeLesson: removeLesson,
     saveCoursePage: saveCoursePage,
     createCourse: createCourse,
