@@ -1235,6 +1235,39 @@ app.delete("/api/videos/:lessonId", route(async function (req, res) {
   res.json({ ok: true });
 }));
 
+app.patch("/api/courses/:id/chapters/:index", route(async function (req, res) {
+  if (!await requireAdminUser(req, res, "관리자만 챕터 이름을 바꿀 수 있습니다.")) return;
+  const courseId = String(req.params.id || "");
+  const index = Number(req.params.index);
+  const title = String((req.body && req.body.title) || "").trim().replace(/\s+/g, " ");
+  if (!title || title.length > 40) {
+    return res.status(400).json({ ok: false, message: "챕터 이름은 40자 안으로 입력해 주세요." });
+  }
+  const course = await db.collection("courses").findOne({ courseId: courseId });
+  if (!course || !Number.isInteger(index) || index < 0 || index >= (course.chapters || []).length) {
+    return res.status(404).json({ ok: false, message: "챕터를 찾을 수 없습니다." });
+  }
+  const chapters = course.chapters;
+  const previous = chapters[index].title || "";
+  const duplicate = chapters.some(function (chapter, chapterIndex) {
+    return chapterIndex !== index && chapter.title === title;
+  });
+  if (duplicate) return res.status(400).json({ ok: false, message: "같은 이름의 챕터가 있습니다." });
+  chapters[index].title = title;
+  await db.collection("courses").updateOne(
+    { _id: course._id },
+    { $set: { chapters: chapters, updatedAt: new Date() } }
+  );
+  if (previous !== title) {
+    await db.collection("lessons").updateMany(
+      { courseId: courseId, chapterTitle: previous },
+      { $set: { chapterTitle: title } }
+    );
+  }
+  clearCatalogCache();
+  res.json({ ok: true });
+}));
+
 app.patch("/api/courses/:id", route(async function (req, res) {
   if (!await requireAdminUser(req, res, "관리자만 강의 소개를 수정할 수 있습니다.")) return;
   const courseId = String(req.params.id || "");

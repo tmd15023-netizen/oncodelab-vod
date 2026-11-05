@@ -753,6 +753,20 @@
     });
   }
 
+  function renameChapter(courseId, index, title) {
+    if (!requireAdmin()) return Promise.resolve({ ok: false, message: "관리자만 챕터 이름을 바꿀 수 있습니다." });
+    return api("/api/courses/" + encodeURIComponent(courseId) + "/chapters/" + encodeURIComponent(index), {
+      method: "PATCH",
+      body: { title: title }
+    }).then(function (result) {
+      if (!result.ok) return result;
+      return refresh(true).then(function () {
+        applyLibrary();
+        return { ok: true };
+      });
+    });
+  }
+
   function renameLesson(lessonId, title) {
     if (!requireAdmin()) return Promise.resolve({ ok: false, message: "관리자만 회차 이름을 바꿀 수 있습니다." });
     return api("/api/lessons/" + encodeURIComponent(lessonId), {
@@ -830,6 +844,7 @@
     saveVideo: saveVideo,
     removeVideo: removeVideo,
     addLesson: addLesson,
+    renameChapter: renameChapter,
     renameLesson: renameLesson,
     moveLesson: moveLesson,
     removeLesson: removeLesson,

@@ -409,7 +409,10 @@
             removeVideo +
             '<button type="button" class="btn small danger" data-remove-lesson="' + window.VodUI.esc(lesson.id) + '">회차 삭제</button></div></div>';
         }).join("");
-        return '<h3 class="chapter-label">' + window.VodUI.esc(chapter.title) + "</h3>" + (rows || '<p class="fine">이 챕터에 회차가 없습니다.</p>');
+        return '<div class="chapter-edit" id="chapter-row-' + chapterIndex + '">' +
+            '<input type="text" maxlength="40" data-chapter-title="' + chapterIndex + '" value="' + window.VodUI.esc(chapter.title) + '" aria-label="챕터 이름" />' +
+            '<button type="button" class="btn small" data-rename-chapter="' + chapterIndex + '" data-course-id="' + window.VodUI.esc(course.id) + '"' + (busy ? " disabled" : "") + ">수정</button>" +
+          "</div>" + (rows || '<p class="fine">이 챕터에 회차가 없습니다.</p>');
       }).join("");
       var options = (course.chapters || []).map(function (chapter) {
         return '<option value="' + window.VodUI.esc(chapter.title) + '"></option>';
@@ -629,6 +632,30 @@
         if (result.ok) selectedCourseId = "";
         setStatus(result.ok ? "강의를 삭제했습니다." : result.message, !result.ok);
         render();
+      });
+      return;
+    }
+    var renameChapter = event.target.closest("[data-rename-chapter]");
+    if (renameChapter) {
+      if (busy) return;
+      var chapterIndex = renameChapter.getAttribute("data-rename-chapter");
+      var chapterInput = root.querySelector('[data-chapter-title="' + chapterIndex + '"]');
+      var chapterTitle = chapterInput ? chapterInput.value.trim() : "";
+      if (!chapterTitle) {
+        setStatus("챕터 이름을 입력해 주세요.", true);
+        render();
+        focusStatus();
+        return;
+      }
+      busy = true;
+      window.VodStore.renameChapter(renameChapter.getAttribute("data-course-id"), chapterIndex, chapterTitle).then(function (result) {
+        busy = false;
+        setStatus(result.ok ? "챕터 이름을 바꿨습니다." : result.message, !result.ok);
+        render();
+        if (result.ok) {
+          var row = document.getElementById("chapter-row-" + chapterIndex);
+          if (row && row.scrollIntoView) row.scrollIntoView({ block: "center" });
+        }
       });
       return;
     }
