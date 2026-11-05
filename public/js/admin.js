@@ -34,8 +34,20 @@
     return /\.(mp4|webm|mov|m4v|ogg|ogv|mkv)$/i.test(file.name);
   }
 
+  var appliedKey = "";
+
   function setStatus(text, error) {
     status = { text: text || "", error: !!error };
+    appliedKey = "";
+  }
+
+  function rememberApplied(key, ok) {
+    appliedKey = ok && key ? key : "";
+  }
+
+  function appliedMark(key) {
+    if (!appliedKey || appliedKey !== key || status.error) return "";
+    return '<span class="applied-mark">반영됨</span>';
   }
 
   /* form.title은 입력창이 아니라 폼의 title 속성이라, 이름 있는 입력은 elements로 읽습니다. */
@@ -92,8 +104,11 @@
         '<button type="button" class="chip" data-tab="enroll" aria-pressed="' + (tab === "enroll" ? "true" : "false") + '">수강 승인' + (pending ? " " + pending : "") + "</button>" +
         '<button type="button" class="chip" data-tab="courses" aria-pressed="' + (tab === "courses" ? "true" : "false") + '">강의</button>' +
       "</div>" +
-      panel;
+      panel +
+      (status.text ? '<p class="admin-toast' + (status.error ? " is-error" : "") + '" role="status">' + window.VodUI.esc(status.text) + "</p>" : "");
     applyEnrollQuery();
+    var mark = root.querySelector(".applied-mark");
+    if (mark && mark.scrollIntoView) mark.scrollIntoView({ block: "nearest" });
   }
 
   function applyEnrollQuery() {
@@ -400,6 +415,7 @@
               '<span class="lesson-index">' + String(index + 1).padStart(2, "0") + "</span>" +
               '<input type="text" maxlength="60" data-lesson-title="' + window.VodUI.esc(lesson.id) + '" value="' + window.VodUI.esc(lesson.title) + '" aria-label="회차 이름" />' +
               '<button type="button" class="btn small primary" data-rename-lesson="' + window.VodUI.esc(lesson.id) + '"' + (busy ? " disabled" : "") + ">이름 저장</button>" +
+              appliedMark("lesson:" + lesson.id) +
               '<button type="button" class="btn small" data-move-lesson="' + window.VodUI.esc(lesson.id) + '" data-move="up"' + (busy || first ? " disabled" : "") + ">위로</button>" +
               '<button type="button" class="btn small" data-move-lesson="' + window.VodUI.esc(lesson.id) + '" data-move="down"' + (busy || last ? " disabled" : "") + ">아래로</button>" +
             "</div>" +
@@ -407,11 +423,13 @@
             '<div class="file-line"><input type="file" data-file-for="' + window.VodUI.esc(lesson.id) + '" accept="video/*" />' +
             '<button type="button" class="btn small primary" data-upload="' + window.VodUI.esc(lesson.id) + '"' + (busy ? " disabled" : "") + ">업로드</button>" +
             removeVideo +
-            '<button type="button" class="btn small danger" data-remove-lesson="' + window.VodUI.esc(lesson.id) + '">회차 삭제</button></div></div>';
+            '<button type="button" class="btn small danger" data-remove-lesson="' + window.VodUI.esc(lesson.id) + '">회차 삭제</button>' +
+            appliedMark("video:" + lesson.id) + "</div></div>";
         }).join("");
         return '<div class="chapter-edit" id="chapter-row-' + chapterIndex + '">' +
             '<input type="text" maxlength="40" data-chapter-title="' + chapterIndex + '" value="' + window.VodUI.esc(chapter.title) + '" aria-label="챕터 이름" />' +
             '<button type="button" class="btn small" data-rename-chapter="' + chapterIndex + '" data-course-id="' + window.VodUI.esc(course.id) + '"' + (busy ? " disabled" : "") + ">수정</button>" +
+            appliedMark("chapter:" + course.id + ":" + chapterIndex) +
           "</div>" + (rows || '<p class="fine">이 챕터에 회차가 없습니다.</p>');
       }).join("");
       var options = (course.chapters || []).map(function (chapter) {
@@ -430,12 +448,14 @@
           '<label class="field">이미지 없을 때 카드 문구<textarea name="thumbLines" rows="2" required maxlength="80">' + window.VodUI.esc((course.thumbLines || []).join("\n")) + "</textarea></label>" +
           tonePicker(course.tone) +
           '<button class="btn primary" type="submit"' + (busy ? " disabled" : "") + ">소개 저장</button>" +
+          appliedMark("course:" + course.id) +
         "</form>" +
         '<div class="cover-box"><h3>자격증 이미지</h3>' + preview +
           '<div class="file-line"><input type="file" data-cover-for="' + window.VodUI.esc(course.id) + '" accept="image/jpeg,image/png,image/webp" />' +
           '<button type="button" class="btn small primary" data-upload-cover="' + window.VodUI.esc(course.id) + '"' + (busy ? " disabled" : "") + ">이미지 올리기</button>" +
           removeCover + "</div>" +
           '<p class="fine">JPG, PNG, WEBP · 5MB 이하. 강의 소개 왼쪽에 표시됩니다.</p>' +
+          appliedMark("cover:" + course.id) +
           (/이미지|자격증/.test(status.text) ? '<p class="cover-status' + (status.error ? " is-error" : "") + '">' + window.VodUI.esc(status.text) + "</p>" : "") +
           "</div>" +
         "<h3>회차 영상</h3>" +
@@ -565,6 +585,7 @@
       window.VodStore.saveVideo(lessonId, file).then(function (result) {
         busy = false;
         setStatus(result.ok ? "영상을 저장했습니다." : result.message, !result.ok);
+        rememberApplied("video:" + lessonId, result.ok);
         render();
       });
       return;
@@ -577,6 +598,7 @@
       window.VodStore.removeVideo(removeVideo.getAttribute("data-remove-video")).then(function (result) {
         busy = false;
         setStatus(result.ok ? "영상을 삭제했습니다." : result.message, !result.ok);
+        rememberApplied("video:" + removeVideo.getAttribute("data-remove-video"), result.ok);
         render();
       });
       return;
@@ -603,6 +625,7 @@
       window.VodStore.saveCourseCover(courseId, coverFile).then(function (result) {
         busy = false;
         setStatus(result.ok ? "자격증 이미지를 저장했습니다." : result.message, !result.ok);
+        rememberApplied("cover:" + courseId, result.ok);
         render();
         var box = document.querySelector(".cover-box");
         if (box && box.scrollIntoView) box.scrollIntoView({ block: "center" });
@@ -617,6 +640,7 @@
       window.VodStore.removeCourseCover(removeCover.getAttribute("data-remove-cover")).then(function (result) {
         busy = false;
         setStatus(result.ok ? "자격증 이미지를 삭제했습니다." : result.message, !result.ok);
+        rememberApplied("cover:" + removeCover.getAttribute("data-remove-cover"), result.ok);
         render();
       });
       return;
@@ -651,11 +675,8 @@
       window.VodStore.renameChapter(renameChapter.getAttribute("data-course-id"), chapterIndex, chapterTitle).then(function (result) {
         busy = false;
         setStatus(result.ok ? "챕터 이름을 바꿨습니다." : result.message, !result.ok);
+        rememberApplied("chapter:" + renameChapter.getAttribute("data-course-id") + ":" + chapterIndex, result.ok);
         render();
-        if (result.ok) {
-          var row = document.getElementById("chapter-row-" + chapterIndex);
-          if (row && row.scrollIntoView) row.scrollIntoView({ block: "center" });
-        }
       });
       return;
     }
@@ -675,8 +696,8 @@
       window.VodStore.renameLesson(renameId, nextTitle).then(function (result) {
         busy = false;
         setStatus(result.ok ? "회차 이름을 바꿨습니다." : result.message, !result.ok);
+        rememberApplied("lesson:" + renameId, result.ok);
         render();
-        if (result.ok) focusLesson(renameId);
       });
       return;
     }
@@ -688,8 +709,8 @@
       window.VodStore.moveLesson(moveId, moveLesson.getAttribute("data-move")).then(function (result) {
         busy = false;
         setStatus(result.ok ? "회차 순서를 바꿨습니다." : result.message, !result.ok);
+        rememberApplied("lesson:" + moveId, result.ok);
         render();
-        if (result.ok) focusLesson(moveId);
       });
       return;
     }
@@ -793,6 +814,7 @@
       }).then(function (result) {
         busy = false;
         setStatus(result.ok ? "강의 소개를 저장했습니다." : result.message, !result.ok);
+        rememberApplied("course:" + pageForm.getAttribute("data-course-page"), result.ok);
         render();
       });
       return;
@@ -843,6 +865,7 @@
       if (!file) {
         busy = false;
         setStatus(chapterTitle + " 챕터에 '" + lessonTitle + "' 회차를 추가했습니다.");
+        rememberApplied("lesson:" + created.id, true);
         render();
         focusLesson(created.id);
         return;
@@ -852,6 +875,7 @@
       window.VodStore.saveVideo(created.id, file).then(function (result) {
         busy = false;
         setStatus(result.ok ? chapterTitle + " 챕터에 회차와 영상을 저장했습니다." : "회차는 추가됐지만 영상을 저장하지 못했습니다. " + result.message, !result.ok);
+        rememberApplied("video:" + created.id, result.ok);
         render();
         focusLesson(created.id);
       });
