@@ -518,6 +518,8 @@ button.course-card {
   margin-top: auto;
   font-size: 22px;
   line-height: 1.25;
+  -webkit-text-stroke: 3px #111;
+  paint-order: stroke fill;
 }
 
 .thumb strong span { display: block; }
@@ -546,6 +548,8 @@ button.course-card {
 .art-card.tone-slate { color: #1e293b; }
 .thumb.tone-sand,
 .art-card.tone-sand { color: #292524; }
+.thumb.tone-slate strong,
+.thumb.tone-sand strong { -webkit-text-stroke: 0; }
 
 .tone-field { display: grid; gap: 8px; }
 .tone-picker { display: flex; flex-wrap: wrap; gap: 8px; }
