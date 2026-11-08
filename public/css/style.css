@@ -802,6 +802,17 @@ button.course-card {
   font-size: 12px;
   font-weight: 800;
 }
+.chapter-block { margin: 18px 0 8px; }
+.chapter-block .chapter-edit { margin-top: 0; }
+.chapter-add {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: flex-end;
+  margin: 8px 0 16px;
+}
+.chapter-add .field { flex: 1 1 220px; max-width: 420px; margin: 0; }
+.chapter-add .btn { margin-top: 0; }
 .chapter-edit {
   display: flex;
   flex-wrap: wrap;

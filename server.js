@@ -1235,6 +1235,76 @@ app.delete("/api/videos/:lessonId", route(async function (req, res) {
   res.json({ ok: true });
 }));
 
+app.post("/api/courses/:id/chapters", route(async function (req, res) {
+  if (!await requireAdminUser(req, res, "관리자만 챕터를 추가할 수 있습니다.")) return;
+  const courseId = String(req.params.id || "");
+  const title = String((req.body && req.body.title) || "").trim().replace(/\s+/g, " ");
+  if (!title || title.length > 40) {
+    return res.status(400).json({ ok: false, message: "챕터 이름은 40자 안으로 입력해 주세요." });
+  }
+  const course = await db.collection("courses").findOne({ courseId: courseId });
+  if (!course) return res.status(404).json({ ok: false, message: "강의를 찾을 수 없습니다." });
+  const chapters = Array.isArray(course.chapters) ? course.chapters : [];
+  if (chapters.some(function (chapter) { return chapter.title === title; })) {
+    return res.status(400).json({ ok: false, message: "같은 이름의 챕터가 있습니다." });
+  }
+  chapters.push({ title: title, lessons: [] });
+  await db.collection("courses").updateOne(
+    { _id: course._id },
+    { $set: { chapters: chapters, updatedAt: new Date() } }
+  );
+  clearCatalogCache();
+  res.json({ ok: true, index: chapters.length - 1 });
+}));
+
+app.post("/api/courses/:id/chapters/:index/move", route(async function (req, res) {
+  if (!await requireAdminUser(req, res, "관리자만 챕터 순서를 바꿀 수 있습니다.")) return;
+  const courseId = String(req.params.id || "");
+  const index = Number(req.params.index);
+  const direction = String((req.body && req.body.direction) || "");
+  const course = await db.collection("courses").findOne({ courseId: courseId });
+  const chapters = course && Array.isArray(course.chapters) ? course.chapters : null;
+  if (!chapters || !Number.isInteger(index) || index < 0 || index >= chapters.length) {
+    return res.status(404).json({ ok: false, message: "챕터를 찾을 수 없습니다." });
+  }
+  const target = direction === "up" ? index - 1 : direction === "down" ? index + 1 : -1;
+  if (target < 0 || target >= chapters.length) {
+    return res.status(400).json({ ok: false, message: direction === "up" ? "이미 맨 위 챕터입니다." : "이미 맨 아래 챕터입니다." });
+  }
+  const current = chapters[index];
+  chapters[index] = chapters[target];
+  chapters[target] = current;
+  await db.collection("courses").updateOne(
+    { _id: course._id },
+    { $set: { chapters: chapters, updatedAt: new Date() } }
+  );
+  clearCatalogCache();
+  res.json({ ok: true, index: target });
+}));
+
+app.delete("/api/courses/:id/chapters/:index", route(async function (req, res) {
+  if (!await requireAdminUser(req, res, "관리자만 챕터를 삭제할 수 있습니다.")) return;
+  const courseId = String(req.params.id || "");
+  const index = Number(req.params.index);
+  const course = await db.collection("courses").findOne({ courseId: courseId });
+  const chapters = course && Array.isArray(course.chapters) ? course.chapters : null;
+  if (!chapters || !Number.isInteger(index) || index < 0 || index >= chapters.length) {
+    return res.status(404).json({ ok: false, message: "챕터를 찾을 수 없습니다." });
+  }
+  const removed = chapters.splice(index, 1)[0];
+  const lessonIds = (removed.lessons || []).map(function (lesson) { return lesson.id; }).filter(Boolean);
+  for (const lessonId of lessonIds) {
+    await deleteVideo(lessonId);
+    await db.collection("lessons").deleteOne({ lessonId: lessonId });
+  }
+  await db.collection("courses").updateOne(
+    { _id: course._id },
+    { $set: { chapters: chapters, updatedAt: new Date() } }
+  );
+  clearCatalogCache();
+  res.json({ ok: true });
+}));
+
 app.patch("/api/courses/:id/chapters/:index", route(async function (req, res) {
   if (!await requireAdminUser(req, res, "관리자만 챕터 이름을 바꿀 수 있습니다.")) return;
   const courseId = String(req.params.id || "");

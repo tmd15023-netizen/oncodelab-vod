@@ -426,11 +426,18 @@
             '<button type="button" class="btn small danger" data-remove-lesson="' + window.VodUI.esc(lesson.id) + '">회차 삭제</button>' +
             appliedMark("video:" + lesson.id) + "</div></div>";
         }).join("");
-        return '<div class="chapter-edit" id="chapter-row-' + chapterIndex + '">' +
+        var chapterFirst = chapterIndex === 0;
+        var chapterLast = chapterIndex === chapters.length - 1;
+        return '<div class="chapter-block">' +
+          '<div class="chapter-edit" id="chapter-row-' + chapterIndex + '">' +
             '<input type="text" maxlength="40" data-chapter-title="' + chapterIndex + '" value="' + window.VodUI.esc(chapter.title) + '" aria-label="챕터 이름" />' +
             '<button type="button" class="btn small" data-rename-chapter="' + chapterIndex + '" data-course-id="' + window.VodUI.esc(course.id) + '"' + (busy ? " disabled" : "") + ">수정</button>" +
             appliedMark("chapter:" + course.id + ":" + chapterIndex) +
-          "</div>" + (rows || '<p class="fine">이 챕터에 회차가 없습니다.</p>');
+            '<button type="button" class="btn small" data-move-chapter="' + chapterIndex + '" data-move="up" data-course-id="' + window.VodUI.esc(course.id) + '"' + (busy || chapterFirst ? " disabled" : "") + ">위로</button>" +
+            '<button type="button" class="btn small" data-move-chapter="' + chapterIndex + '" data-move="down" data-course-id="' + window.VodUI.esc(course.id) + '"' + (busy || chapterLast ? " disabled" : "") + ">아래로</button>" +
+            '<button type="button" class="btn small danger" data-remove-chapter="' + chapterIndex + '" data-course-id="' + window.VodUI.esc(course.id) + '" data-lesson-count="' + (chapter.lessons || []).length + '"' + (busy ? " disabled" : "") + ">삭제</button>" +
+          "</div>" + (rows || '<p class="fine">이 챕터에 회차가 없습니다.</p>') +
+        "</div>";
       }).join("");
       var options = (course.chapters || []).map(function (chapter) {
         return '<option value="' + window.VodUI.esc(chapter.title) + '"></option>';
@@ -459,7 +466,11 @@
           (/이미지|자격증/.test(status.text) ? '<p class="cover-status' + (status.error ? " is-error" : "") + '">' + window.VodUI.esc(status.text) + "</p>" : "") +
           "</div>" +
         "<h3>회차 영상</h3>" +
-        (lessonBody || '<p class="fine">아직 회차가 없습니다. 아래에서 회차와 영상을 추가하세요.</p>') +
+        '<form class="chapter-add" data-add-chapter="' + window.VodUI.esc(course.id) + '">' +
+          '<label class="field">새 챕터<input name="title" required maxlength="40" placeholder="챕터 이름" /></label>' +
+          '<button class="btn primary" type="submit"' + (busy ? " disabled" : "") + ">챕터 추가</button>" +
+        "</form>" +
+        (lessonBody || '<p class="fine">아직 챕터가 없습니다. 위에서 챕터를 추가한 뒤 회차를 넣으세요.</p>') +
         '<form class="manage-form" data-add-lesson="' + window.VodUI.esc(course.id) + '">' +
           "<h3>회차 추가</h3>" +
           '<label class="field">챕터<input name="chapter" list="chapters-' + window.VodUI.esc(course.id) + '" required maxlength="40" placeholder="기존 챕터 또는 새 챕터 이름" /></label>' +
@@ -659,6 +670,38 @@
       });
       return;
     }
+    var moveChapter = event.target.closest("[data-move-chapter]");
+    if (moveChapter) {
+      if (busy) return;
+      var moveChapterIndex = moveChapter.getAttribute("data-move-chapter");
+      var moveChapterId = moveChapter.getAttribute("data-course-id");
+      var moveDirection = moveChapter.getAttribute("data-move");
+      busy = true;
+      window.VodStore.moveChapter(moveChapterId, moveChapterIndex, moveDirection).then(function (result) {
+        busy = false;
+        var nextIndex = result.ok ? result.index : moveChapterIndex;
+        setStatus(result.ok ? "챕터 순서를 바꿨습니다." : result.message, !result.ok);
+        rememberApplied("chapter:" + moveChapterId + ":" + nextIndex, result.ok);
+        render();
+      });
+      return;
+    }
+    var removeChapter = event.target.closest("[data-remove-chapter]");
+    if (removeChapter) {
+      if (busy) return;
+      var lessonCount = Number(removeChapter.getAttribute("data-lesson-count") || "0");
+      var ask = lessonCount > 0
+        ? "이 챕터와 회차 " + lessonCount + "개, 올린 영상을 삭제할까요?"
+        : "이 챕터를 삭제할까요?";
+      if (!window.confirm(ask)) return;
+      busy = true;
+      window.VodStore.removeChapter(removeChapter.getAttribute("data-course-id"), removeChapter.getAttribute("data-remove-chapter")).then(function (result) {
+        busy = false;
+        setStatus(result.ok ? "챕터를 삭제했습니다." : result.message, !result.ok);
+        render();
+      });
+      return;
+    }
     var renameChapter = event.target.closest("[data-rename-chapter]");
     if (renameChapter) {
       if (busy) return;
@@ -815,6 +858,28 @@
         busy = false;
         setStatus(result.ok ? "강의 소개를 저장했습니다." : result.message, !result.ok);
         rememberApplied("course:" + pageForm.getAttribute("data-course-page"), result.ok);
+        render();
+      });
+      return;
+    }
+    var chapterForm = event.target.closest("[data-add-chapter]");
+    if (chapterForm) {
+      event.preventDefault();
+      if (busy) return;
+      var newChapterTitle = fieldValue(chapterForm, "title").trim();
+      if (!newChapterTitle) {
+        setStatus("챕터 이름을 입력해 주세요.", true);
+        render();
+        focusStatus();
+        return;
+      }
+      var chapterCourseId = chapterForm.getAttribute("data-add-chapter");
+      busy = true;
+      setStatus("챕터를 추가하는 중입니다.");
+      window.VodStore.addChapter(chapterCourseId, newChapterTitle).then(function (result) {
+        busy = false;
+        setStatus(result.ok ? "챕터를 추가했습니다." : result.message, !result.ok);
+        rememberApplied("chapter:" + chapterCourseId + ":" + result.index, result.ok);
         render();
       });
       return;

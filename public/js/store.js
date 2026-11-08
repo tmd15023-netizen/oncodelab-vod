@@ -753,6 +753,47 @@
     });
   }
 
+  function addChapter(courseId, title) {
+    if (!requireAdmin()) return Promise.resolve({ ok: false, message: "관리자만 챕터를 추가할 수 있습니다." });
+    return api("/api/courses/" + encodeURIComponent(courseId) + "/chapters", {
+      method: "POST",
+      body: { title: title }
+    }).then(function (result) {
+      if (!result.ok) return result;
+      return refresh(true).then(function () {
+        applyLibrary();
+        return { ok: true, index: result.index };
+      });
+    });
+  }
+
+  function moveChapter(courseId, index, direction) {
+    if (!requireAdmin()) return Promise.resolve({ ok: false, message: "관리자만 챕터 순서를 바꿀 수 있습니다." });
+    return api("/api/courses/" + encodeURIComponent(courseId) + "/chapters/" + encodeURIComponent(index) + "/move", {
+      method: "POST",
+      body: { direction: direction }
+    }).then(function (result) {
+      if (!result.ok) return result;
+      return refresh(true).then(function () {
+        applyLibrary();
+        return { ok: true, index: result.index };
+      });
+    });
+  }
+
+  function removeChapter(courseId, index) {
+    if (!requireAdmin()) return Promise.resolve({ ok: false, message: "관리자만 챕터를 삭제할 수 있습니다." });
+    return api("/api/courses/" + encodeURIComponent(courseId) + "/chapters/" + encodeURIComponent(index), {
+      method: "DELETE"
+    }).then(function (result) {
+      if (!result.ok) return result;
+      return refresh(true).then(function () {
+        applyLibrary();
+        return { ok: true };
+      });
+    });
+  }
+
   function renameChapter(courseId, index, title) {
     if (!requireAdmin()) return Promise.resolve({ ok: false, message: "관리자만 챕터 이름을 바꿀 수 있습니다." });
     return api("/api/courses/" + encodeURIComponent(courseId) + "/chapters/" + encodeURIComponent(index), {
@@ -844,6 +885,9 @@
     saveVideo: saveVideo,
     removeVideo: removeVideo,
     addLesson: addLesson,
+    addChapter: addChapter,
+    moveChapter: moveChapter,
+    removeChapter: removeChapter,
     renameChapter: renameChapter,
     renameLesson: renameLesson,
     moveLesson: moveLesson,
