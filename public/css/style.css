@@ -1389,9 +1389,12 @@ button.course-card {
   gap: 8px;
   align-items: center;
 }
-.lesson-index {
-  min-width: 28px;
-  font-size: 14px;
+.lesson-edit input.lesson-index {
+  flex: 0 0 64px;
+  width: 64px;
+  min-width: 64px;
+  padding: 0 8px;
+  text-align: center;
   font-weight: 800;
 }
 .lesson-edit input {

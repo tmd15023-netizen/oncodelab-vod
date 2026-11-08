@@ -412,7 +412,7 @@
           var last = chapter === lastChapter && index === (chapter.lessons || []).length - 1;
           return '<div class="lesson-admin" id="lesson-row-' + window.VodUI.esc(lesson.id) + '">' +
             '<div class="lesson-edit">' +
-              '<span class="lesson-index">' + String(index + 1).padStart(2, "0") + "</span>" +
+              '<input class="lesson-index" maxlength="8" data-lesson-number="' + window.VodUI.esc(lesson.id) + '" value="' + window.VodUI.esc(lesson.numberLabel || String(index + 1).padStart(2, "0")) + '" aria-label="회차 번호" />' +
               '<input type="text" maxlength="60" data-lesson-title="' + window.VodUI.esc(lesson.id) + '" value="' + window.VodUI.esc(lesson.title) + '" aria-label="회차 이름" />' +
               '<button type="button" class="btn small primary" data-rename-lesson="' + window.VodUI.esc(lesson.id) + '"' + (busy ? " disabled" : "") + ">이름 저장</button>" +
               appliedMark("lesson:" + lesson.id) +
@@ -728,17 +728,25 @@
       if (busy) return;
       var renameId = renameLesson.getAttribute("data-rename-lesson");
       var titleInput = root.querySelector('[data-lesson-title="' + renameId + '"]');
+      var numberInput = root.querySelector('[data-lesson-number="' + renameId + '"]');
       var nextTitle = titleInput ? titleInput.value.trim() : "";
+      var nextNumber = numberInput ? numberInput.value.trim() : "";
       if (nextTitle.length < 2) {
         setStatus("회차 제목을 두 글자 이상 입력해 주세요.", true);
         render();
         focusStatus();
         return;
       }
+      if (nextNumber && !/^[0-9][0-9.\-]*$/.test(nextNumber.replace(/\s+/g, ""))) {
+        setStatus("회차 번호는 숫자로 입력해 주세요. 예: 01, 1-1", true);
+        render();
+        focusStatus();
+        return;
+      }
       busy = true;
-      window.VodStore.renameLesson(renameId, nextTitle).then(function (result) {
+      window.VodStore.renameLesson(renameId, nextTitle, nextNumber).then(function (result) {
         busy = false;
-        setStatus(result.ok ? "회차 이름을 바꿨습니다." : result.message, !result.ok);
+        setStatus(result.ok ? "회차 번호와 이름을 저장했습니다." : result.message, !result.ok);
         rememberApplied("lesson:" + renameId, result.ok);
         render();
       });

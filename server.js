@@ -293,7 +293,8 @@ function publicChapter(chapter) {
         id: lesson.id,
         title: lesson.title || "",
         summary: lesson.summary || "",
-        seconds: lesson.seconds || 0
+        seconds: lesson.seconds || 0,
+        numberLabel: lesson.numberLabel || ""
       };
     })
   };
@@ -368,7 +369,15 @@ async function courseWithLesson(lessonId) {
   return db.collection("courses").findOne({ "chapters.lessons.id": lessonId });
 }
 
-async function renameLesson(lessonId, title) {
+function cleanNumberLabel(value) {
+  const label = String(value == null ? "" : value).trim().replace(/\s+/g, "");
+  if (!label) return "";
+  if (label.length > 8 || !/^[0-9][0-9.\-]*$/.test(label)) return null;
+  if (/^[0-9]{1,2}$/.test(label)) return label.padStart(2, "0");
+  return label;
+}
+
+async function renameLesson(lessonId, title, numberLabel) {
   const course = await courseWithLesson(lessonId);
   if (!course) return false;
   const chapters = (course.chapters || []).map(function (chapter) {
@@ -376,7 +385,10 @@ async function renameLesson(lessonId, title) {
       title: chapter.title,
       lessons: (chapter.lessons || []).map(function (lesson) {
         if (lesson.id !== lessonId) return lesson;
-        return Object.assign({}, lesson, { title: title });
+        const next = Object.assign({}, lesson, { title: title });
+        if (numberLabel) next.numberLabel = numberLabel;
+        else delete next.numberLabel;
+        return next;
       })
     };
   });
@@ -384,7 +396,12 @@ async function renameLesson(lessonId, title) {
     { _id: course._id },
     { $set: { chapters: chapters, updatedAt: new Date() } }
   );
-  await db.collection("lessons").updateOne({ lessonId: lessonId }, { $set: { title: title } });
+  const lessonUpdate = { title: title };
+  if (numberLabel) lessonUpdate.numberLabel = numberLabel;
+  await db.collection("lessons").updateOne(
+    { lessonId: lessonId },
+    numberLabel ? { $set: lessonUpdate } : { $set: { title: title }, $unset: { numberLabel: "" } }
+  );
   clearCatalogCache();
   return true;
 }
@@ -1117,10 +1134,14 @@ app.patch("/api/lessons/:lessonId", route(async function (req, res) {
   if (!await requireAdminUser(req, res, "관리자만 회차 이름을 바꿀 수 있습니다.")) return;
   const lessonId = String(req.params.lessonId || "");
   const title = lessonTitle(req.body && req.body.title);
+  const numberLabel = cleanNumberLabel(req.body && req.body.numberLabel);
   if (title.length < 2 || title.length > 60) {
     return res.status(400).json({ ok: false, message: "회차 제목은 2자에서 60자 사이로 입력해 주세요." });
   }
-  if (!await renameLesson(lessonId, title)) {
+  if (numberLabel === null) {
+    return res.status(400).json({ ok: false, message: "회차 번호는 숫자 8자 안으로 입력해 주세요. 예: 01, 1-1" });
+  }
+  if (!await renameLesson(lessonId, title, numberLabel)) {
     return res.status(404).json({ ok: false, message: "회차를 찾을 수 없습니다." });
   }
   res.json({ ok: true });

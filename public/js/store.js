@@ -808,11 +808,11 @@
     });
   }
 
-  function renameLesson(lessonId, title) {
+  function renameLesson(lessonId, title, numberLabel) {
     if (!requireAdmin()) return Promise.resolve({ ok: false, message: "관리자만 회차 이름을 바꿀 수 있습니다." });
     return api("/api/lessons/" + encodeURIComponent(lessonId), {
       method: "PATCH",
-      body: { title: title }
+      body: { title: title, numberLabel: numberLabel || "" }
     }).then(function (result) {
       if (!result.ok) return result;
       return refresh(true).then(function () {

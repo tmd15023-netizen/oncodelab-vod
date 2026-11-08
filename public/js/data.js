@@ -169,7 +169,7 @@
           summary: item.summary,
           video: item.video || "",
           chapterTitle: chapterItem.title,
-          number: list.length + 1
+          number: item.numberLabel || String(list.length + 1).padStart(2, "0")
         });
       });
     });
