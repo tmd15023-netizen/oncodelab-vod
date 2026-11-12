@@ -94,7 +94,7 @@
         '<div class="stage">' + stage + "</div>" +
         '<div class="player-toolbar">' + navButton(prev, "이전 회차", false) + navButton(next, "다음 회차", true) + extra + "</div>" +
         '<p class="player-status" id="player-status" role="status"></p>' +
-        '<p class="lesson-summary">' + window.VodUI.esc(lesson.summary) + "</p>" +
+        (lesson.summary && lesson.summary !== "관리자가 추가한 회차입니다." ? '<p class="lesson-summary">' + window.VodUI.esc(lesson.summary) + "</p>" : "") +
         sampleNote + keys +
       "</section>" +
       '<aside class="curriculum" aria-label="강의 목차">' + curriculumHTML() + "</aside></div>";

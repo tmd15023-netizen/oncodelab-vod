@@ -292,7 +292,7 @@ function publicChapter(chapter) {
       return {
         id: lesson.id,
         title: lesson.title || "",
-        summary: lesson.summary || "",
+        summary: lesson.summary && lesson.summary !== "관리자가 추가한 회차입니다." ? lesson.summary : "",
         seconds: lesson.seconds || 0,
         numberLabel: lesson.numberLabel || ""
       };
@@ -807,7 +807,7 @@ async function cleanLesson(input) {
     courseId: courseId,
     chapterTitle: chapterTitle,
     title: title,
-    summary: summary || "관리자가 추가한 회차입니다."
+    summary: summary
   };
 }
 
