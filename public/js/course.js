@@ -35,7 +35,7 @@
         });
         var done = state.completed.indexOf(lesson.id) !== -1;
         var current = point.lesson && point.lesson.id === lesson.id && !done && state.done > 0;
-        var status = done ? "학습 완료" : access === "approved" || access === "admin" ? "재생" : "잠금";
+        var status = done ? "학습 완료" : access === "approved" || access === "admin" ? "재생" : "잠김";
         return '<a class="lesson-row' + (done ? " is-done" : "") + (current ? " is-current" : "") + '" href="' + window.VodUI.watchHref(course.id, lesson.id) + '">' +
           '<span class="num">' + String(meta.number).padStart(2, "0") + "</span>" +
           "<span><strong>" + window.VodUI.esc(lesson.title) + "</strong>" + (lesson.summary && lesson.summary !== "관리자가 추가한 회차입니다." ? "<small>" + window.VodUI.esc(lesson.summary) + "</small>" : "") + "</span>" +
