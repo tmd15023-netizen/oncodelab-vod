@@ -112,11 +112,14 @@
   function curriculumHTML() {
     var state = window.VodStore.courseState(course);
     var body = course.chapters.map(function (chapter) {
-      var rows = chapter.lessons.map(function (item) {
+      var visible = (chapter.lessons || []).filter(function (item) { return item.listed !== false; });
+      if (!visible.length) return "";
+      var rows = visible.map(function (item) {
         var meta = null;
         state.lessons.forEach(function (lessonItem) {
           if (lessonItem.id === item.id) meta = lessonItem;
         });
+        if (!meta) return "";
         var done = state.completed.indexOf(item.id) !== -1;
         var current = item.id === lesson.id;
         var time = window.VodUI.clock(item.seconds);

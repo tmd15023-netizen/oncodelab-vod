@@ -294,7 +294,8 @@ function publicChapter(chapter) {
         title: lesson.title || "",
         summary: lesson.summary && lesson.summary !== "관리자가 추가한 회차입니다." ? lesson.summary : "",
         seconds: lesson.seconds || 0,
-        numberLabel: lesson.numberLabel || ""
+        numberLabel: lesson.numberLabel || "",
+        listed: lesson.listed !== false
       };
     })
   };
@@ -349,7 +350,8 @@ async function pushLesson(courseId, chapterTitle, lesson) {
       id: lesson.id,
       title: lesson.title,
       summary: lesson.summary || "",
-      seconds: lesson.seconds || 0
+      seconds: lesson.seconds || 0,
+      listed: false
     });
   }
   await db.collection("courses").updateOne(
@@ -831,10 +833,23 @@ app.get("/api/health", route(async function (req, res) {
   res.json({ ok: true, db: db.databaseName });
 }));
 
+function catalogForLearner(list) {
+  return (list || []).map(function (course) {
+    const chapters = [];
+    (course.chapters || []).forEach(function (chapter) {
+      const lessons = (chapter.lessons || []).filter(function (lesson) { return lesson.listed !== false; });
+      if (lessons.length) chapters.push({ title: chapter.title, lessons: lessons });
+    });
+    return Object.assign({}, course, { chapters: chapters });
+  });
+}
+
 app.get("/api/catalog", route(async function (req, res) {
   const list = await publicCatalog();
+  const user = await currentUser(req);
+  const isAdmin = !!(user && user.role === "admin");
   res.setHeader("Cache-Control", "private, max-age=60");
-  res.json({ ok: true, catalog: list });
+  res.json({ ok: true, catalog: isAdmin ? list : catalogForLearner(list) });
 }));
 
 app.get("/api/session", route(async function (req, res) {
@@ -1130,6 +1145,29 @@ app.post("/api/lessons/import", route(async function (req, res) {
   res.json({ ok: true, imported: imported });
 }));
 
+app.post("/api/lessons/:lessonId/visibility", route(async function (req, res) {
+  if (!await requireAdminUser(req, res, "관리자만 회차 노출을 바꿀 수 있습니다.")) return;
+  const lessonId = String(req.params.lessonId || "");
+  const listed = !!(req.body && req.body.listed);
+  const course = await courseWithLesson(lessonId);
+  if (!course) return res.status(404).json({ ok: false, message: "회차를 찾을 수 없습니다." });
+  const chapters = (course.chapters || []).map(function (chapter) {
+    return {
+      title: chapter.title,
+      lessons: (chapter.lessons || []).map(function (lesson) {
+        if (lesson.id !== lessonId) return lesson;
+        return Object.assign({}, lesson, { listed: listed });
+      })
+    };
+  });
+  await db.collection("courses").updateOne(
+    { _id: course._id },
+    { $set: { chapters: chapters, updatedAt: new Date() } }
+  );
+  clearCatalogCache();
+  res.json({ ok: true, listed: listed });
+}));
+
 app.patch("/api/lessons/:lessonId", route(async function (req, res) {
   if (!await requireAdminUser(req, res, "관리자만 회차 이름을 바꿀 수 있습니다.")) return;
   const lessonId = String(req.params.lessonId || "");
@@ -1235,6 +1273,14 @@ app.get("/api/videos/:lessonId/url", route(async function (req, res) {
   const video = isId(lessonId) ? await db.collection("videos").findOne({ lessonId: lessonId }) : null;
   if (!video) return res.json({ ok: true, url: "" });
   if (user.role !== "admin") {
+    const course = await courseWithLesson(lessonId);
+    let hidden = false;
+    (course && course.chapters || []).forEach(function (chapter) {
+      (chapter.lessons || []).forEach(function (lesson) {
+        if (lesson.id === lessonId && lesson.listed === false) hidden = true;
+      });
+    });
+    if (hidden) return res.status(403).json({ ok: false, message: "아직 공개되지 않은 회차입니다." });
     const approved = await db.collection("enrollments").findOne({
       userId: user._id,
       courseId: video.courseId

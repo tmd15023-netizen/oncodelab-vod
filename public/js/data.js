@@ -162,6 +162,7 @@
     var list = [];
     course.chapters.forEach(function (chapterItem) {
       chapterItem.lessons.forEach(function (item) {
+        if (item.listed === false) return;
         list.push({
           id: item.id,
           title: item.title,

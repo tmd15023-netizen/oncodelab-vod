@@ -407,6 +407,8 @@
             ? window.VodUI.esc(meta.name) + " · " + bytes(meta.size) + (meta.seconds ? " · " + window.VodUI.clock(meta.seconds) : "")
             : "등록된 영상이 없습니다. 승인된 수강생에게는 샘플 영상이 재생됩니다.";
           var removeVideo = meta ? '<button type="button" class="btn small" data-remove-video="' + window.VodUI.esc(lesson.id) + '">영상 삭제</button>' : "";
+          var listed = lesson.listed !== false;
+          var listButton = '<button type="button" class="btn small' + (listed ? "" : " primary") + '" data-list-lesson="' + window.VodUI.esc(lesson.id) + '" data-listed="' + (listed ? "1" : "0") + '"' + (busy ? " disabled" : "") + ">" + (listed ? "숨김" : "노출") + "</button>";
           var first = chapterIndex === 0 && index === 0;
           var lastChapter = chapters[chapters.length - 1];
           var last = chapter === lastChapter && index === (chapter.lessons || []).length - 1;
@@ -422,6 +424,9 @@
             "<p>" + info + "</p>" +
             '<div class="file-line"><input type="file" data-file-for="' + window.VodUI.esc(lesson.id) + '" accept="video/*" />' +
             '<button type="button" class="btn small primary" data-upload="' + window.VodUI.esc(lesson.id) + '"' + (busy ? " disabled" : "") + ">업로드</button>" +
+            listButton +
+            appliedMark("listed:" + lesson.id) +
+            (listed ? "" : '<span class="fine">학습자에게 숨김</span>') +
             removeVideo +
             '<button type="button" class="btn small danger" data-remove-lesson="' + window.VodUI.esc(lesson.id) + '">회차 삭제</button>' +
             appliedMark("video:" + lesson.id) + "</div></div>";
@@ -570,6 +575,21 @@
     if (reject) {
       window.VodStore.setEnrollment(reject.getAttribute("data-reject"), "rejected").then(function (rejected) {
         setStatus(rejected.ok ? "수강 신청을 거절했습니다." : rejected.message, !rejected.ok);
+        render();
+      });
+      return;
+    }
+    var listLesson = event.target.closest("[data-list-lesson]");
+    if (listLesson) {
+      if (busy) return;
+      var listId = listLesson.getAttribute("data-list-lesson");
+      var nextListed = listLesson.getAttribute("data-listed") !== "1";
+      busy = true;
+      render();
+      window.VodStore.setLessonListed(listId, nextListed).then(function (result) {
+        busy = false;
+        setStatus(result.ok ? (nextListed ? "이 회차를 학습자에게 노출했습니다." : "이 회차를 학습자에게 숨겼습니다.") : result.message, !result.ok);
+        if (result.ok) rememberApplied("listed:" + listId);
         render();
       });
       return;

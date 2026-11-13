@@ -28,11 +28,14 @@
       return "<li>" + window.VodUI.esc(goal) + "</li>";
     }).join("");
     var chapters = course.chapters.map(function (chapter) {
-      var rows = chapter.lessons.map(function (lesson) {
+      var visible = (chapter.lessons || []).filter(function (lesson) { return lesson.listed !== false; });
+      if (!visible.length) return "";
+      var rows = visible.map(function (lesson) {
         var meta = null;
         state.lessons.forEach(function (item) {
           if (item.id === lesson.id) meta = item;
         });
+        if (!meta) return "";
         var done = state.completed.indexOf(lesson.id) !== -1;
         var current = point.lesson && point.lesson.id === lesson.id && !done && state.done > 0;
         var status = done ? "학습 완료" : access === "approved" || access === "admin" ? "재생" : "잠김";
