@@ -784,6 +784,16 @@ function publicProgress(row) {
   };
 }
 
+function publicMemberProgress(row) {
+  return {
+    userId: String(row.userId || ""),
+    courseId: row.courseId || "",
+    completed: row.completed || [],
+    lastLesson: row.lastLesson || "",
+    updatedAt: row.updatedAt ? new Date(row.updatedAt).getTime() : 0
+  };
+}
+
 async function enrollmentList(user) {
   const match = user.role === "admin" ? {} : { userId: user._id };
   const rows = await db.collection("enrollments").aggregate([
@@ -869,6 +879,7 @@ app.get("/api/session", route(async function (req, res) {
       user: null,
       enrollments: [],
       progress: [],
+      memberProgress: [],
       users: [],
       lessons: [],
       videos: videoRows
@@ -881,17 +892,22 @@ app.get("/api/session", route(async function (req, res) {
       return rows.map(publicEnrollment);
     });
   const progressPromise = db.collection("progress").find({ userId: user._id }).toArray();
+  const memberProgressPromise = isAdmin && scopeAdmin
+    ? db.collection("progress").find({}, { projection: { positions: 0 } }).toArray()
+    : Promise.resolve([]);
   const usersPromise = isAdmin && scopeAdmin
     ? db.collection("users").find({}, { projection: { passwordHash: 0, passwordSalt: 0 } }).sort({ createdAt: 1 }).toArray()
     : Promise.resolve([]);
   const enrollments = await enrollmentPromise;
   const progress = await progressPromise;
+  const memberProgress = await memberProgressPromise;
   const users = await usersPromise;
   res.json({
     ok: true,
     user: publicUser(user),
     enrollments: enrollments,
     progress: progress.map(publicProgress),
+    memberProgress: isAdmin && scopeAdmin ? memberProgress.map(publicMemberProgress) : [],
     lessons: [],
     videos: videoRows,
     users: users.map(publicUser)

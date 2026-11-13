@@ -207,15 +207,85 @@
     return { text: text, past: ends[0] < Date.now() };
   }
 
+  function lessonLabel(lesson) {
+    var number = String(lesson.number || "");
+    if (number.length < 2) number = number.padStart(2, "0");
+    return number + " " + lesson.title;
+  }
+
+  function lessonInCourse(course, lessonId) {
+    var found = null;
+    if (!course || !lessonId) return null;
+    (course.chapters || []).forEach(function (chapter) {
+      (chapter.lessons || []).forEach(function (lesson, index) {
+        if (lesson.id !== lessonId) return;
+        found = {
+          title: lesson.title || "",
+          number: lesson.numberLabel || String(index + 1).padStart(2, "0")
+        };
+      });
+    });
+    return found;
+  }
+
+  function watchSummary(userId, courseId) {
+    var course = window.VodCatalog.byId(courseId);
+    var lessons = course ? window.VodCatalog.lessonsOf(course) : [];
+    var row = window.VodStore.memberCourseProgress(userId, courseId);
+    var byId = {};
+    lessons.forEach(function (lesson) { byId[lesson.id] = lesson; });
+    var done = (row.completed || []).filter(function (id) { return byId[id]; }).length;
+    var total = lessons.length;
+    var percent = total ? Math.round((done / total) * 100) : 0;
+    var last = byId[row.lastLesson] || lessonInCourse(course, row.lastLesson);
+    if (!last && !done) return "시청 기록 없음";
+    var lastText = last ? "마지막 " + lessonLabel(last) : "마지막 시청 회차 없음";
+    if (!total) return lastText;
+    return percent + "% · " + lastText;
+  }
+
+  function memberWatchLines(user) {
+    var lines = [];
+    var seen = {};
+    window.VodStore.listEnrollments().forEach(function (item) {
+      if (item.userId !== user.id || item.status !== "approved") return;
+      seen[item.courseId] = true;
+      lines.push(item.courseTitle + " · " + watchSummary(user.id, item.courseId));
+    });
+    window.VodStore.memberProgressRows(user.id).forEach(function (row) {
+      if (seen[row.courseId]) return;
+      if (!row.lastLesson && !(row.completed || []).length) return;
+      var course = window.VodCatalog.byId(row.courseId);
+      seen[row.courseId] = true;
+      lines.push((course ? course.title : "삭제된 강의") + " · " + watchSummary(user.id, row.courseId));
+    });
+    return lines;
+  }
+
   function memberDetail(user) {
     var me = window.VodStore.getStudent();
     var rows = window.VodStore.listEnrollments().filter(function (item) { return item.userId === user.id; });
     var list = rows.length
       ? rows.map(function (item) {
+          var watch = item.status === "approved"
+            ? '<p class="member-watch">' + window.VodUI.esc(watchSummary(user.id, item.courseId)) + "</p>"
+            : "";
           return "<li><strong>" + window.VodUI.esc(item.courseTitle) + "</strong> · " + accessLabel(item) +
-            (periodText(item) ? " · " + window.VodUI.esc(periodText(item)) : "") + "</li>";
+            (periodText(item) ? " · " + window.VodUI.esc(periodText(item)) : "") + watch + "</li>";
         }).join("")
       : "<li>수강 내역이 없습니다.</li>";
+    var approvedIds = {};
+    rows.forEach(function (item) {
+      if (item.status === "approved") approvedIds[item.courseId] = true;
+    });
+    var extraWatch = window.VodStore.memberProgressRows(user.id).filter(function (row) {
+      return !approvedIds[row.courseId] && (row.lastLesson || (row.completed || []).length);
+    }).map(function (row) {
+      var course = window.VodCatalog.byId(row.courseId);
+      return "<li><strong>" + window.VodUI.esc(course ? course.title : "삭제된 강의") + "</strong>" +
+        '<p class="member-watch">' + window.VodUI.esc(watchSummary(user.id, row.courseId)) + "</p></li>";
+    }).join("");
+    list += extraWatch;
     /* 기본 관리자(admin@ncodelab.kr)는 서버가 ADMIN_PASSWORD로 관리하므로 권한을 바꾸지 않습니다. */
     var self = me && user.id === me.id;
     var locked = self || user.email === "admin@ncodelab.kr";
@@ -263,6 +333,12 @@
       var count = window.VodStore.listEnrollments().filter(function (item) { return item.userId === user.id; }).length;
       var end = memberEndText(user);
       var self = me && user.id === me.id;
+      var lines = memberWatchLines(user);
+      var progress = lines.length
+        ? '<span class="member-progress">' + lines.map(function (line) {
+            return "<span>" + window.VodUI.esc(line) + "</span>";
+          }).join("") + "</span>"
+        : "";
       return '<button type="button" class="member-row" data-pick-user="' + window.VodUI.esc(user.id) + '">' +
         '<strong class="member-name">' + window.VodUI.esc(user.name) + "</strong>" +
         '<span class="member-mail">' + window.VodUI.esc(user.email) + "</span>" +
@@ -270,7 +346,8 @@
         '<span class="member-role">' + memberRoleText(user, self) + "</span>" +
         '<span class="member-end' + (end.past ? " is-past" : "") + '">' + window.VodUI.esc(end.text) + "</span>" +
         '<span class="member-count">' + (user.role === "admin" ? "—" : count + "개") + "</span>" +
-        '<span class="member-chevron" aria-hidden="true">›</span></button>';
+        '<span class="member-chevron" aria-hidden="true">›</span>' +
+        progress + "</button>";
     }).join("");
     var body = rows || '<div class="empty"><strong>검색 결과가 없습니다</strong><p>이름이나 이메일로 다시 찾아 보세요.</p></div>';
     return '<section class="section"><div class="enroll-tools"><p class="enroll-count">' + shown.length + "명</p>" +

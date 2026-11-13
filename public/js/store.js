@@ -5,6 +5,7 @@
   var account = null;
   var enrollmentCache = [];
   var progressCache = {};
+  var memberProgressCache = [];
   var userCache = [];
   var videoCache = {};
   var lessonCache = [];
@@ -141,6 +142,7 @@
     account = data && data.user ? data.user : null;
     enrollmentCache = data && data.enrollments ? data.enrollments : [];
     progressCache = {};
+    memberProgressCache = data && data.memberProgress ? data.memberProgress : [];
     userCache = data && data.users ? data.users : [];
     videoCache = {};
     lessonCache = data && data.lessons ? data.lessons : [];
@@ -233,6 +235,7 @@
     account = null;
     enrollmentCache = [];
     progressCache = {};
+    memberProgressCache = [];
     userCache = [];
     return api("/api/logout", { method: "POST", body: {} });
   }
@@ -259,6 +262,18 @@
         lastLesson: row.lastLesson
       }
     });
+  }
+
+  function memberProgressRows(userId) {
+    return memberProgressCache.filter(function (row) { return row.userId === userId; });
+  }
+
+  function memberCourseProgress(userId, courseId) {
+    var found = null;
+    memberProgressCache.forEach(function (row) {
+      if (row.userId === userId && row.courseId === courseId) found = row;
+    });
+    return found || { completed: [], lastLesson: "", updatedAt: 0 };
   }
 
   function courseState(course) {
@@ -876,6 +891,8 @@
     logout: logout,
     clearProgress: clearProgress,
     getProgress: getProgress,
+    memberProgressRows: memberProgressRows,
+    memberCourseProgress: memberCourseProgress,
     courseState: courseState,
     savePosition: savePosition,
     markComplete: markComplete,

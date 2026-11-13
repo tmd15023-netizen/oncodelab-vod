@@ -1221,6 +1221,19 @@ button.course-card {
 }
 .member-name { font-size: 14px; }
 .member-end.is-past { color: #b45309; font-weight: 800; }
+.member-progress {
+  grid-column: 1 / -1;
+  display: grid;
+  gap: 2px;
+}
+.member-progress span {
+  overflow: visible;
+  white-space: normal;
+  text-overflow: clip;
+  font-size: 12px;
+  line-height: 1.45;
+}
+.member-watch { margin: 2px 0 0; }
 .member-chevron { color: var(--muted); font-size: 18px; font-weight: 700; }
 .member-head,
 .member-actions { display: flex; justify-content: space-between; gap: 8px; align-items: center; flex-wrap: wrap; }
@@ -1505,7 +1518,8 @@ button.course-card {
       "name role count chev"
       "end end end end"
       "mail mail mail mail"
-      "phone phone phone phone";
+      "phone phone phone phone"
+      "progress progress progress progress";
   }
   .member-name { grid-area: name; }
   .member-mail { grid-area: mail; }
@@ -1514,6 +1528,7 @@ button.course-card {
   .member-end { grid-area: end; }
   .member-count { grid-area: count; }
   .member-chevron { grid-area: chev; }
+  .member-progress { grid-area: progress; }
   .enroll-row.enroll-edit {
     grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
     padding: 12px;
