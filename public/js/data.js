@@ -161,7 +161,7 @@
   function lessonsOf(course) {
     var list = [];
     course.chapters.forEach(function (chapterItem) {
-      chapterItem.lessons.forEach(function (item) {
+      chapterItem.lessons.forEach(function (item, index) {
         if (item.listed === false) return;
         list.push({
           id: item.id,
@@ -170,7 +170,7 @@
           summary: item.summary,
           video: item.video || "",
           chapterTitle: chapterItem.title,
-          number: item.numberLabel || String(list.length + 1).padStart(2, "0")
+          number: item.numberLabel || String(index + 1).padStart(2, "0")
         });
       });
     });
