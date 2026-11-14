@@ -178,7 +178,11 @@
   }
 
   function durationOf(course) {
-    return lessonsOf(course).reduce(function (sum, item) { return sum + item.seconds; }, 0);
+    return lessonsOf(course).reduce(function (sum, item) {
+      var seconds = Number(item.seconds) || 0;
+      if (seconds <= 0) return sum;
+      return sum + seconds + 15 + 15;
+    }, 0);
   }
 
   var catalog = {
